@@ -54,6 +54,26 @@ type Body struct {
 
 func (b *Body) Clone() *Body {
 	clone := *b
+
+	// Deep clone FormData
+	if len(b.FormData.Fields) > 0 {
+		clone.FormData.Fields = make([]FormField, len(b.FormData.Fields))
+		for i, field := range b.FormData.Fields {
+			clone.FormData.Fields[i] = field
+			// Deep clone Files slice
+			if len(field.Files) > 0 {
+				clone.FormData.Fields[i].Files = make([]string, len(field.Files))
+				copy(clone.FormData.Fields[i].Files, field.Files)
+			}
+		}
+	}
+
+	// Deep clone URLEncoded
+	if len(b.URLEncoded) > 0 {
+		clone.URLEncoded = make([]KeyValue, len(b.URLEncoded))
+		copy(clone.URLEncoded, b.URLEncoded)
+	}
+
 	return &clone
 }
 
@@ -83,6 +103,30 @@ type HTTPResponse struct {
 
 func (r *HTTPRequest) Clone() *HTTPRequest {
 	clone := *r
+
+	// Deep clone slices to avoid modifying the original
+	if len(r.Headers) > 0 {
+		clone.Headers = make([]KeyValue, len(r.Headers))
+		copy(clone.Headers, r.Headers)
+	}
+
+	if len(r.QueryParams) > 0 {
+		clone.QueryParams = make([]KeyValue, len(r.QueryParams))
+		copy(clone.QueryParams, r.QueryParams)
+	}
+
+	if len(r.PathParams) > 0 {
+		clone.PathParams = make([]KeyValue, len(r.PathParams))
+		copy(clone.PathParams, r.PathParams)
+	}
+
+	if len(r.Variables) > 0 {
+		clone.Variables = make([]Variable, len(r.Variables))
+		copy(clone.Variables, r.Variables)
+	}
+
+	// Clone Body
+	clone.Body = *r.Body.Clone()
 
 	if r.Auth != (Auth{}) {
 		clone.Auth = r.Auth.Clone()

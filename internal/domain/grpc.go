@@ -67,6 +67,40 @@ type GRPCResponseDetail struct {
 
 func (r *GRPCRequestSpec) Clone() *GRPCRequestSpec {
 	clone := *r
+
+	// Deep clone slices to avoid modifying the original
+	if len(r.Metadata) > 0 {
+		clone.Metadata = make([]KeyValue, len(r.Metadata))
+		copy(clone.Metadata, r.Metadata)
+	}
+
+	if len(r.Variables) > 0 {
+		clone.Variables = make([]Variable, len(r.Variables))
+		copy(clone.Variables, r.Variables)
+	}
+
+	if len(r.Services) > 0 {
+		clone.Services = make([]GRPCService, len(r.Services))
+		for i, service := range r.Services {
+			clone.Services[i] = service
+			if len(service.Methods) > 0 {
+				clone.Services[i].Methods = make([]GRPCMethod, len(service.Methods))
+				copy(clone.Services[i].Methods, service.Methods)
+			}
+		}
+	}
+
+	// Deep clone ServerInfo.ProtoFiles
+	if len(r.ServerInfo.ProtoFiles) > 0 {
+		clone.ServerInfo.ProtoFiles = make([]string, len(r.ServerInfo.ProtoFiles))
+		copy(clone.ServerInfo.ProtoFiles, r.ServerInfo.ProtoFiles)
+	}
+
+	// Clone Auth
+	if r.Auth != (Auth{}) {
+		clone.Auth = r.Auth.Clone()
+	}
+
 	return &clone
 }
 
