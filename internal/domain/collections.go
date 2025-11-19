@@ -36,6 +36,7 @@ type ColSpec struct {
 	Requests []*Request `yaml:"requests"`
 	Headers  []KeyValue `yaml:"headers"`
 	Auth     Auth       `yaml:"auth"`
+	Notes    string     `yaml:"notes"`
 }
 
 func (c *Collection) Clone() *Collection {
@@ -61,6 +62,9 @@ func (c *Collection) Clone() *Collection {
 	if c.Spec.Auth != (Auth{}) {
 		clone.Spec.Auth = c.Spec.Auth.Clone()
 	}
+
+	// Clone notes
+	clone.Spec.Notes = c.Spec.Notes
 
 	for _, req := range c.Spec.Requests {
 		cloneReq := req.Clone()
