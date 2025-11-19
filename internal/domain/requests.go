@@ -163,10 +163,11 @@ type LastUsedEnvironment struct {
 }
 
 const (
-	AuthTypeNone   = "none"
-	AuthTypeBasic  = "basic"
-	AuthTypeToken  = "token"
-	AuthTypeAPIKey = "apiKey"
+	AuthTypeNone     = "none"
+	AuthTypeBasic    = "basic"
+	AuthTypeToken    = "token"
+	AuthTypeAPIKey   = "apiKey"
+	AuthTypeInherit  = "inherit"
 )
 
 type Auth struct {

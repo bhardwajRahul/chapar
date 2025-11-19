@@ -618,6 +618,15 @@ func (v *View) createRestfulContainer(req *domain.Request) Container {
 	return ct
 }
 
+func (v *View) SetRequestCollection(id string, collection *domain.Collection) {
+	if ct, ok := v.containers.Get(id); ok {
+		if ct, ok := ct.(RestContainer); ok {
+			ct.SetCollection(collection)
+		}
+		// TODO: Add support for gRPC containers if needed
+	}
+}
+
 func (v *View) SetSendingRequestLoading(id string) {
 	if ct, ok := v.containers.Get(id); ok {
 		if ct, ok := ct.(RestContainer); ok {

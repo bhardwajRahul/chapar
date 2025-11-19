@@ -956,6 +956,13 @@ func (c *Controller) viewRequest(id string) {
 	if c.view.IsTabOpen(id) {
 		c.view.SwitchToTab(req.MetaData.ID)
 		c.view.OpenRequestContainer(req)
+		// Set collection if request belongs to one
+		if req.CollectionID != "" {
+			collection := c.model.GetCollection(req.CollectionID)
+			if collection != nil {
+				c.view.SetRequestCollection(id, collection)
+			}
+		}
 		return
 	}
 
@@ -966,6 +973,14 @@ func (c *Controller) viewRequest(id string) {
 
 	c.view.OpenTab(req.MetaData.ID, req.MetaData.Name, TypeRequest)
 	c.view.OpenRequestContainer(clone)
+
+	// Set collection if request belongs to one
+	if req.CollectionID != "" {
+		collection := c.model.GetCollection(req.CollectionID)
+		if collection != nil {
+			c.view.SetRequestCollection(id, collection)
+		}
+	}
 }
 
 func (c *Controller) OpenCollection(id string) {
