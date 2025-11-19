@@ -57,6 +57,20 @@ func (s *Service) SendRequest(requestID, activeEnvironmentID string) (*Response,
 	// clone the request to make sure we do not modify the original request
 	r := req.Clone()
 
+	// Merge collection headers and auth if request belongs to a collection
+	if r.CollectionID != "" && r.Spec.HTTP != nil {
+		collection := s.requests.GetCollection(r.CollectionID)
+		if collection != nil {
+			// Merge headers: collection headers as base, request headers override
+			r.Spec.HTTP.Request.Headers = s.mergeHeaders(collection.Spec.Headers, r.Spec.HTTP.Request.Headers)
+
+			// Resolve auth: if request auth is inherit, use collection auth
+			if r.Spec.HTTP.Request.Auth.Type == domain.AuthTypeInherit {
+				r.Spec.HTTP.Request.Auth = collection.Spec.Auth
+			}
+		}
+	}
+
 	var activeEnvironment *domain.Environment
 	// Get environment if provided
 	if activeEnvironmentID != "" {
@@ -72,6 +86,42 @@ func (s *Service) SendRequest(requestID, activeEnvironmentID string) (*Response,
 	}
 
 	return response, nil
+}
+
+// mergeHeaders merges collection headers with request headers
+// Collection headers are the base, request headers override collection headers with the same key
+// Only enabled headers are included
+func (s *Service) mergeHeaders(collectionHeaders, requestHeaders []domain.KeyValue) []domain.KeyValue {
+	// Create a map of request headers by key (case-insensitive) for quick lookup
+	requestHeaderMap := make(map[string]domain.KeyValue)
+	for _, h := range requestHeaders {
+		if h.Enable {
+			requestHeaderMap[strings.ToLower(h.Key)] = h
+		}
+	}
+
+	// Start with collection headers
+	merged := make([]domain.KeyValue, 0)
+
+	// Add collection headers that don't have request overrides
+	for _, ch := range collectionHeaders {
+		if !ch.Enable {
+			continue
+		}
+		keyLower := strings.ToLower(ch.Key)
+		if _, hasOverride := requestHeaderMap[keyLower]; !hasOverride {
+			merged = append(merged, ch)
+		}
+	}
+
+	// Add all request headers (they override collection headers)
+	for _, rh := range requestHeaders {
+		if rh.Enable {
+			merged = append(merged, rh)
+		}
+	}
+
+	return merged
 }
 
 func (s *Service) sendRequest(req *domain.HTTPRequestSpec, e *domain.Environment) (*Response, error) {

@@ -228,9 +228,24 @@ func (s *Service) Invoke(id, activeEnvironmentID string) (*Response, error) {
 		return nil, ErrRequestNotFound
 	}
 
-	spec := req.Clone().Spec.GRPC
+	clonedReq := req.Clone()
+	spec := clonedReq.Spec.GRPC
 	if spec == nil {
 		return nil, nil
+	}
+
+	// Merge collection headers (as metadata) and auth if request belongs to a collection
+	if clonedReq.CollectionID != "" {
+		collection := s.requests.GetCollection(clonedReq.CollectionID)
+		if collection != nil {
+			// Merge collection headers as metadata: collection headers as base, request metadata override
+			spec.Metadata = s.mergeMetadata(collection.Spec.Headers, spec.Metadata)
+
+			// Resolve auth: if request auth is inherit, use collection auth
+			if spec.Auth.Type == domain.AuthTypeInherit {
+				spec.Auth = collection.Spec.Auth
+			}
+		}
 	}
 
 	var activeEnvironment = s.getActiveEnvironment(activeEnvironmentID)
@@ -402,6 +417,42 @@ func (s *Service) invokeUnary(ctx context.Context, conn *grpc.ClientConn, method
 	}
 
 	return string(respJSON), nil
+}
+
+// mergeMetadata merges collection headers (as metadata) with request metadata
+// Collection headers are the base, request metadata override collection headers with the same key
+// Only enabled items are included
+func (s *Service) mergeMetadata(collectionHeaders, requestMetadata []domain.KeyValue) []domain.KeyValue {
+	// Create a map of request metadata by key (case-insensitive) for quick lookup
+	requestMetadataMap := make(map[string]domain.KeyValue)
+	for _, m := range requestMetadata {
+		if m.Enable {
+			requestMetadataMap[strings.ToLower(m.Key)] = m
+		}
+	}
+
+	// Start with collection headers (as metadata)
+	merged := make([]domain.KeyValue, 0)
+
+	// Add collection headers that don't have request overrides
+	for _, ch := range collectionHeaders {
+		if !ch.Enable {
+			continue
+		}
+		keyLower := strings.ToLower(ch.Key)
+		if _, hasOverride := requestMetadataMap[keyLower]; !hasOverride {
+			merged = append(merged, ch)
+		}
+	}
+
+	// Add all request metadata (they override collection headers)
+	for _, rm := range requestMetadata {
+		if rm.Enable {
+			merged = append(merged, rm)
+		}
+	}
+
+	return merged
 }
 
 func (s *Service) prepareAuth(req *domain.GRPCRequestSpec) *metadata.MD {
