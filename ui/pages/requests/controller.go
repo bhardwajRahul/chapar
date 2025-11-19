@@ -338,6 +338,8 @@ func (c *Controller) onSave(id string) {
 	tabType := c.view.GetTabType(id)
 	if tabType == TypeRequest {
 		c.saveRequest(id)
+	} else if tabType == TypeCollection {
+		c.saveCollection(id)
 	}
 }
 
@@ -425,7 +427,7 @@ func (c *Controller) onDataChanged(id string, data any, containerType string) {
 	case TypeRequest:
 		c.onRequestDataChanged(id, data)
 	case TypeCollection:
-		c.onCollectionDataChanged(id)
+		c.onCollectionDataChanged(id, data)
 	}
 }
 
@@ -475,11 +477,12 @@ func (c *Controller) checkForPreRequestParams(id string, req *domain.Request, in
 		incomingPreReq *domain.PreRequest
 	)
 
-	if req.MetaData.Type == domain.RequestTypeHTTP {
+	switch req.MetaData.Type {
+	case domain.RequestTypeHTTP:
 		reqType = domain.RequestTypeHTTP
 		preReq = &req.Spec.HTTP.Request.PreRequest
 		incomingPreReq = &inComingRequest.Spec.HTTP.Request.PreRequest
-	} else if req.MetaData.Type == domain.RequestTypeGRPC {
+	case domain.RequestTypeGRPC:
 		reqType = domain.RequestTypeGRPC
 		preReq = &req.Spec.GRPC.PreRequest
 		incomingPreReq = &inComingRequest.Spec.GRPC.PreRequest
@@ -585,10 +588,54 @@ func (c *Controller) getUrlParams(newURL string) []domain.KeyValue {
 	return domain.ParseQueryParams(urlParams[1])
 }
 
-func (c *Controller) onCollectionDataChanged(id string) {
+func (c *Controller) onCollectionDataChanged(id string, data any) {
 	col := c.model.GetCollection(id)
 	if col == nil {
 		c.view.showError(fmt.Errorf("failed to get collection, %s", id))
+		return
+	}
+
+	incomingCollection, ok := data.(*domain.Collection)
+	if !ok {
+		panic("failed to convert data to Collection")
+	}
+
+	// Update headers and auth from incoming data
+	col.Spec.Headers = incomingCollection.Spec.Headers
+	col.Spec.Auth = incomingCollection.Spec.Auth
+
+	// Update the collection in the model
+	if err := c.model.UpdateCollection(col, true); err != nil {
+		c.view.showError(fmt.Errorf("failed to update collection, %w", err))
+		return
+	}
+
+	// Set tab dirty if the in memory data is different from the file
+	collections, err := c.model.LoadCollections()
+	if err != nil {
+		c.view.showError(fmt.Errorf("failed to load collections from file, %w", err))
+		return
+	}
+
+	var colFromFile *domain.Collection
+	for _, c := range collections {
+		if c.MetaData.ID == id {
+			colFromFile = c
+			break
+		}
+	}
+
+	if colFromFile != nil {
+		// Simple comparison: check if headers or auth changed
+		headersChanged := !domain.CompareKeyValues(col.Spec.Headers, colFromFile.Spec.Headers)
+		authChanged := !domain.CompareAuth(col.Spec.Auth, colFromFile.Spec.Auth)
+		c.view.SetTabDirty(id, headersChanged || authChanged)
+	} else {
+		c.view.SetTabDirty(id, true)
+	}
+
+	if err := c.model.UpdateCollection(col, true); err != nil {
+		c.view.showError(fmt.Errorf("failed to update collection, %w", err))
 		return
 	}
 }
@@ -797,15 +844,35 @@ func (c *Controller) saveRequest(id string) {
 	c.view.SetTabDirty(id, false)
 }
 
+func (c *Controller) saveCollection(id string) {
+	col := c.model.GetCollection(id)
+	if col == nil {
+		return
+	}
+
+	if err := c.repo.UpdateCollection(col); err != nil {
+		c.view.showError(fmt.Errorf("failed to update collection, %w", err))
+		return
+	}
+
+	// update the state
+	if err := c.model.UpdateCollection(col, false); err != nil {
+		c.view.showError(fmt.Errorf("failed to update collection, %w", err))
+		return
+	}
+	c.view.SetTabDirty(id, false)
+}
+
 func (c *Controller) onTreeViewNodeClicked(id string) {
 	nodeType := c.view.GetTreeViewNodeType(id)
 	if nodeType == "" {
 		return
 	}
 
-	if nodeType == TypeCollection {
+	switch nodeType {
+	case TypeCollection:
 		c.viewCollection(id)
-	} else if nodeType == TypeRequest {
+	case TypeRequest:
 		c.viewRequest(id)
 	}
 }
@@ -872,7 +939,7 @@ func (c *Controller) addRequestToCollection(id string, requestType string) {
 	c.view.AddChildTreeViewNode(col.MetaData.ID, req)
 	c.model.AddRequestToCollection(col, req)
 	c.view.ExpandTreeViewNode(col.MetaData.ID)
-	clone, _ := domain.Clone[domain.Request](req)
+	clone, _ := domain.Clone(req)
 	clone.MetaData.ID = req.MetaData.ID
 	c.view.OpenTab(req.MetaData.ID, req.MetaData.Name, TypeRequest)
 	c.view.OpenRequestContainer(clone)

@@ -673,10 +673,22 @@ func (v *View) OpenCollectionContainer(collection *domain.Collection) {
 		return
 	}
 
-	ct := collections.New(collection)
+	ct := collections.New(collection, v.theme)
 	ct.Title.SetOnChanged(func(text string) {
 		if v.onTitleChanged != nil {
 			v.onTitleChanged(collection.MetaData.ID, text, TypeCollection)
+		}
+	})
+
+	ct.SetOnDataChanged(func(id string, data any) {
+		if v.onDataChanged != nil {
+			v.onDataChanged(id, data, TypeCollection)
+		}
+	})
+
+	ct.SetOnSave(func(id string) {
+		if v.onSave != nil {
+			v.onSave(id)
 		}
 	})
 

@@ -34,6 +34,8 @@ func (c *Collection) MarshalYaml() ([]byte, error) {
 
 type ColSpec struct {
 	Requests []*Request `yaml:"requests"`
+	Headers  []KeyValue `yaml:"headers"`
+	Auth     Auth       `yaml:"auth"`
 }
 
 func (c *Collection) Clone() *Collection {
@@ -47,6 +49,17 @@ func (c *Collection) Clone() *Collection {
 		Spec: ColSpec{
 			Requests: make([]*Request, 0, len(c.Spec.Requests)),
 		},
+	}
+
+	// Clone headers
+	if len(c.Spec.Headers) > 0 {
+		clone.Spec.Headers = make([]KeyValue, len(c.Spec.Headers))
+		copy(clone.Spec.Headers, c.Spec.Headers)
+	}
+
+	// Clone auth
+	if c.Spec.Auth != (Auth{}) {
+		clone.Spec.Auth = c.Spec.Auth.Clone()
 	}
 
 	for _, req := range c.Spec.Requests {

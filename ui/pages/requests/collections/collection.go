@@ -8,6 +8,8 @@ import (
 	"github.com/chapar-rest/chapar/internal/domain"
 	"github.com/chapar-rest/chapar/ui/chapartheme"
 	"github.com/chapar-rest/chapar/ui/keys"
+	"github.com/chapar-rest/chapar/ui/pages/requests/component"
+	"github.com/chapar-rest/chapar/ui/pages/requests/restful"
 	"github.com/chapar-rest/chapar/ui/widgets"
 )
 
@@ -18,6 +20,12 @@ type Collection struct {
 	saveButton *widget.Clickable
 
 	prompt *widgets.Prompt
+
+	Tabs    *widgets.Tabs
+	Headers *restful.Headers
+	Auth    *component.Auth
+
+	currentTab string
 
 	dataChanged   bool
 	onSave        func(id string)
@@ -50,14 +58,21 @@ func (c *Collection) SetOnSave(f func(id string)) {
 	c.onSave = f
 }
 
-func New(collection *domain.Collection) *Collection {
+func New(collection *domain.Collection, theme *chapartheme.Theme) *Collection {
 	c := &Collection{
 		collection: collection,
 		Title:      widgets.NewEditableLabel(collection.MetaData.Name),
 		prompt:     widgets.NewPrompt("", "", ""),
 		saveButton: new(widget.Clickable),
+		Tabs: widgets.NewTabs([]*widgets.Tab{
+			{Title: "Headers"},
+			{Title: "Auth"},
+		}, nil),
+		Headers: restful.NewHeaders(collection.Spec.Headers),
+		Auth:    component.NewAuth(collection.Spec.Auth, theme),
 	}
 	c.prompt.WithoutRememberBool()
+	c.setupHooks()
 	return c
 }
 
@@ -67,6 +82,22 @@ func (c *Collection) SetOnTitleChanged(f func(string)) {
 
 func (c *Collection) SetTitle(title string) {
 	c.Title.SetText(title)
+}
+
+func (c *Collection) setupHooks() {
+	c.Headers.SetOnChange(func(headers []domain.KeyValue) {
+		c.collection.Spec.Headers = headers
+		if c.onDataChanged != nil {
+			c.onDataChanged(c.collection.MetaData.ID, c.collection)
+		}
+	})
+
+	c.Auth.SetOnChange(func(auth domain.Auth) {
+		c.collection.Spec.Auth = auth
+		if c.onDataChanged != nil {
+			c.onDataChanged(c.collection.MetaData.ID, c.collection)
+		}
+	})
 }
 
 func (c *Collection) Layout(gtx layout.Context, theme *chapartheme.Theme) layout.Dimensions {
@@ -106,6 +137,19 @@ func (c *Collection) Layout(gtx layout.Context, theme *chapartheme.Theme) layout
 						}),
 					)
 				})
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return c.Tabs.Layout(gtx, theme)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				switch c.Tabs.SelectedTab().Title {
+				case "Headers":
+					return c.Headers.Layout(gtx, theme)
+				case "Auth":
+					return c.Auth.Layout(gtx, theme)
+				default:
+					return layout.Dimensions{}
+				}
 			}),
 		)
 	})
