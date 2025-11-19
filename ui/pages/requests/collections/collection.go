@@ -35,8 +35,6 @@ type Collection struct {
 
 	split widgets.SplitView
 
-	currentTab string
-
 	dataChanged   bool
 	onSave        func(id string)
 	onDataChanged func(id string, data any)
