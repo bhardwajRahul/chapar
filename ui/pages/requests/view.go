@@ -627,6 +627,44 @@ func (v *View) SetRequestCollection(id string, collection *domain.Collection) {
 	}
 }
 
+// UpdateCollectionForOpenRequests updates all open request containers that belong to the given collection
+// It takes a function to check if a request ID belongs to the collection
+func (v *View) UpdateCollectionForOpenRequests(collectionID string, collection *domain.Collection, belongsToCollection func(requestID string) bool) {
+	updated := false
+	// Iterate through all open tabs to find requests that belong to this collection
+	for _, tabID := range v.openTabs.Keys() {
+		tab, ok := v.openTabs.Get(tabID)
+		if !ok {
+			continue
+		}
+
+		// Check if this tab is a request
+		tabType, ok := tab.Meta.Get(TypeMeta)
+		if !ok || tabType != TypeRequest {
+			continue
+		}
+
+		// Check if this request belongs to the collection
+		if !belongsToCollection(tabID) {
+			continue
+		}
+
+		// Update the container with the new collection data
+		if ct, ok := v.containers.Get(tabID); ok {
+			if ct, ok := ct.(RestContainer); ok {
+				ct.SetCollection(collection)
+				updated = true
+			}
+			// TODO: Add support for gRPC containers if needed
+		}
+	}
+
+	// Invalidate window to trigger UI refresh if any containers were updated
+	if updated {
+		v.window.Invalidate()
+	}
+}
+
 func (v *View) SetSendingRequestLoading(id string) {
 	if ct, ok := v.containers.Get(id); ok {
 		if ct, ok := ct.(RestContainer); ok {

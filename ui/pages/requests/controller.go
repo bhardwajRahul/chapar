@@ -638,6 +638,12 @@ func (c *Controller) onCollectionDataChanged(id string, data any) {
 		c.view.showError(fmt.Errorf("failed to update collection, %w", err))
 		return
 	}
+
+	// Update all open request containers that belong to this collection
+	c.view.UpdateCollectionForOpenRequests(id, col, func(requestID string) bool {
+		req := c.model.GetRequest(requestID)
+		return req != nil && req.CollectionID == id
+	})
 }
 
 func (c *Controller) onRequestTabClose(id string) {
