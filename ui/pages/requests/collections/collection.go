@@ -87,6 +87,14 @@ func New(collection *domain.Collection, theme *chapartheme.Theme) *Collection {
 			BarWidth: unit.Dp(2),
 		},
 	}
+
+	c.Auth.DropDown.SetOptions(
+		widgets.NewDropDownOption("None").WithValue(domain.AuthTypeNone),
+		widgets.NewDropDownOption("Basic").WithValue(domain.AuthTypeBasic),
+		widgets.NewDropDownOption("Token").WithValue(domain.AuthTypeToken),
+		widgets.NewDropDownOption("API Key").WithValue(domain.AuthTypeAPIKey),
+	)
+
 	c.notesEditor.SingleLine = false
 	c.notesEditor.SetText(collection.Spec.Notes)
 	c.prompt.WithoutRememberBool()
