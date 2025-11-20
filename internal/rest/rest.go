@@ -381,11 +381,29 @@ func IsJSON(s string) bool {
 }
 
 func PrettyJSON(data []byte) (string, error) {
-	out := bytes.Buffer{}
-	if err := json.Indent(&out, data, "", "    "); err != nil {
+	// First, unmarshal to decode Unicode escape sequences (e.g., \u00f3 -> ó)
+	var js interface{}
+	if err := json.Unmarshal(data, &js); err != nil {
 		return "", err
 	}
-	return out.String(), nil
+
+	// Then marshal back with indentation, which will properly encode Unicode characters
+	// without unnecessary escaping for common characters
+	out := bytes.Buffer{}
+	encoder := json.NewEncoder(&out)
+	encoder.SetIndent("", "    ")
+	encoder.SetEscapeHTML(false) // Don't escape HTML characters like <, >, &
+	if err := encoder.Encode(js); err != nil {
+		return "", err
+	}
+
+	// Remove trailing newline added by Encode
+	result := out.String()
+	if len(result) > 0 && result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+	}
+
+	return result, nil
 }
 
 func ParseJSON(text string) (map[string]any, error) {
