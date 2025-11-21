@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"image"
 	"sort"
 	"strings"
 	"sync"
@@ -27,6 +28,8 @@ type KeyValue struct {
 	list *widget.List
 
 	onChanged func(items []*KeyValueItem)
+
+	readonly bool
 }
 
 type KeyValueItem struct {
@@ -59,6 +62,7 @@ func NewKeyValue(items ...*KeyValueItem) *KeyValue {
 		},
 
 		filteredItems: make([]*KeyValueItem, 0),
+		readonly:      false,
 	}
 
 	// To make sure items are sorted by index and have the onValueChange callback set.
@@ -91,6 +95,10 @@ func NewKeyValueItem(key, value, identifier string, active bool) *KeyValueItem {
 	v.SetText(value)
 
 	return kv
+}
+
+func (kv *KeyValue) SetReadOnly(readonly bool) {
+	kv.readonly = readonly
 }
 
 func (kv *KeyValue) Filter(text string) {
@@ -197,6 +205,7 @@ func (kv *KeyValue) itemLayout(gtx layout.Context, theme *chapartheme.Theme, ind
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return leftPadding.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				ch := material.CheckBox(theme.Material(), item.activeBool, "")
+				ch.Size = unit.Dp(20)
 				ch.IconColor = theme.CheckBoxColor
 				return ch.Layout(gtx)
 			})
@@ -206,20 +215,33 @@ func (kv *KeyValue) itemLayout(gtx layout.Context, theme *chapartheme.Theme, ind
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(.80, func(gtx layout.Context) layout.Dimensions {
 					return leftPadding.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						item.keyEditor.ReadOnly = kv.readonly
 						ed := material.Editor(theme.Material(), item.keyEditor, "Key")
 						ed.SelectionColor = theme.TextSelectionColor
+
 						return ed.Layout(gtx)
 					})
 				}),
 				DrawLineFlex(theme.TableBorderColor, unit.Dp(35), unit.Dp(1)),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return leftPadding.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						item.valueEditor.ReadOnly = kv.readonly
 						return item.valueEditor.Layout(gtx, theme, "Value")
 					})
 				}),
 			)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if kv.readonly {
+				return layout.Dimensions{
+					// reserve space for the delete button to keep the layout consistent
+					Size: image.Point{
+						X: gtx.Dp(42),
+						Y: gtx.Dp(20),
+					},
+				}
+			}
+
 			return layout.Inset{
 				Right: unit.Dp(12),
 				Left:  unit.Dp(12),

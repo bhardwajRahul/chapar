@@ -68,4 +68,5 @@ type RestContainer interface {
 	SetPreRequestRequests(requests []*domain.Request, selectedID string)
 	SetOnSetOnTriggerRequestChanged(f func(id, collectionID, requestID string))
 	SetOnRequestTabChange(f func(id, tab string))
+	SetCollection(collection *domain.Collection)
 }

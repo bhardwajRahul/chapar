@@ -74,6 +74,19 @@ func (r *Restful) SetPreRequestRequests(requests []*domain.Request, selectedID s
 	r.Request.PreRequest.SetRequests(requests, selectedID)
 }
 
+// SetCollection sets the collection data for inheritance
+func (r *Restful) SetCollection(collection *domain.Collection) {
+	if collection == nil {
+		return
+	}
+
+	// Set collection headers for inheritance
+	r.Request.Headers.SetCollectionHeaders(collection.Spec.Headers)
+
+	// Set collection auth for inheritance
+	r.Request.Auth.SetCollectionAuth(&collection.Spec.Auth)
+}
+
 func (r *Restful) SetOnSetOnTriggerRequestChanged(f func(id, collectionID, requestID string)) {
 	r.Request.PreRequest.SetOnTriggerRequestChanged(func(collectionID, requestID string) {
 		f(r.Req.MetaData.ID, collectionID, requestID)
