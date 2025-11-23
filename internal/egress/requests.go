@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/chapar-rest/chapar/internal/domain"
+	"github.com/chapar-rest/chapar/internal/graphql"
 	"github.com/chapar-rest/chapar/internal/grpc"
 	"github.com/chapar-rest/chapar/internal/jsonpath"
 	"github.com/chapar-rest/chapar/internal/logger"
@@ -22,18 +23,20 @@ type Service struct {
 	requests     *state.Requests
 	environments *state.Environments
 
-	rest *rest.Service
-	grpc *grpc.Service
+	rest    *rest.Service
+	grpc    *grpc.Service
+	graphql *graphql.Service
 
 	scriptExecutor scripting.Executor
 }
 
-func New(requests *state.Requests, environments *state.Environments, rest *rest.Service, grpc *grpc.Service, scriptExecutor scripting.Executor) *Service {
+func New(requests *state.Requests, environments *state.Environments, rest *rest.Service, grpc *grpc.Service, graphql *graphql.Service, scriptExecutor scripting.Executor) *Service {
 	return &Service{
 		requests:       requests,
 		environments:   environments,
 		rest:           rest,
 		grpc:           grpc,
+		graphql:        graphql,
 		scriptExecutor: scriptExecutor,
 	}
 }
@@ -56,8 +59,12 @@ func (s *Service) Send(id, activeEnvironmentID string) (any, error) {
 	var err error
 	if req.MetaData.Type == domain.RequestTypeHTTP {
 		res, err = s.rest.SendRequest(req.MetaData.ID, activeEnvironmentID)
-	} else {
+	} else if req.MetaData.Type == domain.RequestTypeGRPC {
 		res, err = s.grpc.Invoke(req.MetaData.ID, activeEnvironmentID)
+	} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+		res, err = s.graphql.SendRequest(req.MetaData.ID, activeEnvironmentID)
+	} else {
+		return nil, fmt.Errorf("unknown request type: %s", req.MetaData.Type)
 	}
 
 	var activeEnvironment *domain.Environment
@@ -80,8 +87,12 @@ func (s *Service) preRequest(req *domain.Request, activeEnvironmentID string) er
 	var preReq domain.PreRequest
 	if req.MetaData.Type == domain.RequestTypeHTTP {
 		preReq = req.Spec.GetHTTP().GetPreRequest()
-	} else {
+	} else if req.MetaData.Type == domain.RequestTypeGRPC {
 		preReq = req.Spec.GetGRPC().GetPreRequest()
+	} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+		preReq = req.Spec.GetGraphQL().GetPreRequest()
+	} else {
+		return nil
 	}
 
 	if preReq == (domain.PreRequest{}) || preReq.TriggerRequest == nil || preReq.TriggerRequest.RequestID == "none" {
@@ -113,16 +124,33 @@ func (s *Service) postRequest(req *domain.Request, res any, env *domain.Environm
 		}
 	}
 
-	postReq := req.Spec.GetGRPC().GetPostRequest()
-	if response, ok := res.(*grpc.Response); ok {
-		if err := s.handleGRPcVariables(req.Spec.GetGRPC().Variables, response, env); err != nil {
-			return err
+	if req.MetaData.Type == domain.RequestTypeGRPC {
+		postReq := req.Spec.GetGRPC().GetPostRequest()
+		if response, ok := res.(*grpc.Response); ok {
+			if err := s.handleGRPcVariables(req.Spec.GetGRPC().Variables, response, env); err != nil {
+				return err
+			}
+
+			return s.handleGRPCPostRequest(postReq, response, env)
 		}
 
-		return s.handleGRPCPostRequest(postReq, response, env)
+		return fmt.Errorf("response is not of type *grpc.Response")
 	}
 
-	return fmt.Errorf("response is not of type *grpc.Response")
+	if req.MetaData.Type == domain.RequestTypeGraphQL {
+		postReq := req.Spec.GetGraphQL().GetPostRequest()
+		if response, ok := res.(*graphql.Response); ok {
+			if err := s.handleGraphQLVariables(req.Spec.GetGraphQL().VariablesList, response, env); err != nil {
+				return err
+			}
+
+			return s.handleGraphQLPostRequest(postReq, req, response, env)
+		}
+
+		return fmt.Errorf("response is not of type *graphql.Response")
+	}
+
+	return fmt.Errorf("unknown request type: %s", req.MetaData.Type)
 }
 
 func (s *Service) handleHTTPVariables(variables []domain.Variable, response *rest.Response, env *domain.Environment) error {
@@ -152,7 +180,7 @@ func (s *Service) handleHTTPVariables(variables []domain.Variable, response *res
 
 			if result, ok := data.(string); ok {
 				env.SetKey(v.TargetEnvVariable, result)
-				if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
+				if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
 					return err
 				}
 			}
@@ -160,7 +188,7 @@ func (s *Service) handleHTTPVariables(variables []domain.Variable, response *res
 		case domain.VariableFromHeader:
 			if result, ok := response.ResponseHeaders[v.SourceKey]; ok {
 				env.SetKey(v.TargetEnvVariable, result)
-				if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
+				if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
 					return err
 				}
 			}
@@ -168,7 +196,7 @@ func (s *Service) handleHTTPVariables(variables []domain.Variable, response *res
 			for _, c := range response.Cookies {
 				if c.Name == v.SourceKey {
 					env.SetKey(v.TargetEnvVariable, c.Value)
-					if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
+					if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
 						return err
 					}
 				}
@@ -216,7 +244,7 @@ func (s *Service) handleGRPcVariables(variables []domain.Variable, response *grp
 
 			if result, ok := data.(string); ok {
 				env.SetKey(v.TargetEnvVariable, result)
-				if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
+				if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
 					return err
 				}
 			}
@@ -325,7 +353,7 @@ func (s *Service) handlePostRequestScript(script string, request *domain.Request
 		}
 
 		if changed {
-			if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
+			if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
 				return err
 			}
 		}
@@ -380,7 +408,7 @@ func (s *Service) handlePostRequestFromHeader(r domain.PostRequest, response *re
 		if env != nil {
 			env.SetKey(r.PostRequestSet.Target, result)
 
-			if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
+			if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
 				return err
 			}
 		}
@@ -492,5 +520,190 @@ func (s *Service) handlePostRequestFromTrailers(r domain.PostRequest, res *grpc.
 		}
 	}
 
+	return nil
+}
+
+func (s *Service) handleGraphQLVariables(variables []domain.Variable, response *graphql.Response, env *domain.Environment) error {
+	if variables == nil || response == nil || env == nil {
+		return nil
+	}
+
+	fn := func(v domain.Variable) error {
+		if !v.Enable {
+			return nil
+		}
+
+		if v.OnStatusCode != response.StatusCode {
+			return nil
+		}
+
+		switch v.From {
+		case domain.VariableFromBody:
+			data, err := jsonpath.Get(response.JSON, v.JsonPath)
+			if err != nil {
+				return err
+			}
+
+			if data == nil {
+				return nil
+			}
+
+			if result, ok := data.(string); ok {
+				env.SetKey(v.TargetEnvVariable, result)
+				if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
+					return err
+				}
+			}
+
+		case domain.VariableFromHeader:
+			if result, ok := response.ResponseHeaders[v.SourceKey]; ok {
+				env.SetKey(v.TargetEnvVariable, result)
+				if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	}
+
+	errG := errgroup.Group{}
+	for _, v := range variables {
+		v := v
+		errG.Go(func() error {
+			return fn(v)
+		})
+	}
+
+	return errG.Wait()
+}
+
+func (s *Service) handleGraphQLPostRequest(r domain.PostRequest, request *domain.Request, response *graphql.Response, env *domain.Environment) error {
+	if r == (domain.PostRequest{}) || response == nil {
+		return nil
+	}
+
+	// TODO: this is a temporary solution to fix crashes when scripting is disabled. it need to be improved
+	if r.Type == domain.PrePostTypePython && prefs.GetGlobalConfig().Spec.Scripting.Enabled {
+		return s.handleGraphQLPostRequestScript(r.Script, request, response, env)
+	}
+
+	if r.Type != domain.PrePostTypeSetEnv {
+		// TODO: implement other types
+		return nil
+	}
+
+	if env == nil {
+		logger.Warn("No active environment, cannot handle post request set environment")
+		return nil
+	}
+
+	// only handle post request if the status code is the same as the one provided
+	if response.StatusCode != r.PostRequestSet.StatusCode {
+		return nil
+	}
+
+	switch r.PostRequestSet.From {
+	case domain.PostRequestSetFromResponseBody:
+		return s.handleGraphQLPostRequestFromBody(r, response, env)
+	case domain.PostRequestSetFromResponseHeader:
+		return s.handleGraphQLPostRequestFromHeader(r, response, env)
+	}
+
+	return nil
+}
+
+func (s *Service) handleGraphQLPostRequestScript(script string, request *domain.Request, resp *graphql.Response, env *domain.Environment) error {
+	// if script executor is not set, return error
+	if s.scriptExecutor == nil {
+		logger.Warn("script executor is not enable or not ready yet, cannot handle post request script")
+		notifications.Send("Failed to run post request script, check console for logs", notifications.NotificationTypeError, time.Second*3)
+		return nil
+	}
+
+	params := &scripting.ExecParams{
+		Env: env,
+		Req: scripting.RequestDataFromDomain(request),
+		Res: &scripting.ResponseData{
+			StatusCode: resp.StatusCode,
+			Headers:    resp.ResponseHeaders,
+			Body:       resp.JSON,
+		},
+	}
+
+	result, err := s.scriptExecutor.Execute(context.Background(), script, params)
+	if err != nil {
+		return err
+	}
+
+	if env != nil {
+		changed := false
+		for k, v := range result.SetEnvironments {
+			if data, ok := v.(string); ok {
+				env.SetKey(k, data)
+				changed = true
+			}
+		}
+
+		if changed {
+			if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
+				return err
+			}
+		}
+	} else if len(result.SetEnvironments) > 0 {
+		// let user know that the environment is nil
+		logger.Warn("No active environment, cannot set environment variables from script")
+	}
+
+	for _, pt := range result.Prints {
+		logger.Print(pt)
+	}
+
+	return nil
+}
+
+func (s *Service) handleGraphQLPostRequestFromBody(r domain.PostRequest, response *graphql.Response, env *domain.Environment) error {
+	// handle post request
+	if r.PostRequestSet.From != domain.PostRequestSetFromResponseBody {
+		return nil
+	}
+
+	if response.JSON == "" || !response.IsJSON {
+		return nil
+	}
+
+	data, err := jsonpath.Get(response.JSON, r.PostRequestSet.FromKey)
+	if err != nil {
+		return err
+	}
+
+	if data == nil {
+		return nil
+	}
+
+	if result, ok := data.(string); ok {
+		if env != nil {
+			env.SetKey(r.PostRequestSet.Target, result)
+			return s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false)
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) handleGraphQLPostRequestFromHeader(r domain.PostRequest, response *graphql.Response, env *domain.Environment) error {
+	if r.PostRequestSet.From != domain.PostRequestSetFromResponseHeader {
+		return nil
+	}
+
+	if result, ok := response.ResponseHeaders[r.PostRequestSet.FromKey]; ok {
+		if env != nil {
+			env.SetKey(r.PostRequestSet.Target, result)
+
+			if err := s.environments.UpdateEnvironment(env, state.SourceGraphQLService, false); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }

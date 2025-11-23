@@ -42,6 +42,7 @@ const (
 	CodeLanguageShell      = "Shell"
 	CodeLanguageDotNet     = "Shell"
 	CodeLanguageProperties = "properties"
+	CodeLanguageGraphQL    = "GraphQL"
 )
 
 type CodeEditor struct {

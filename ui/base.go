@@ -11,6 +11,7 @@ import (
 	"gioui.org/x/component"
 
 	"github.com/chapar-rest/chapar/internal/egress"
+	"github.com/chapar-rest/chapar/internal/graphql"
 	"github.com/chapar-rest/chapar/internal/grpc"
 	"github.com/chapar-rest/chapar/internal/prefs"
 	"github.com/chapar-rest/chapar/internal/repository"
@@ -80,7 +81,8 @@ func NewBase(appVersion string, w *app.Window, navi *navigator.Navigator) (*Base
 	// init services
 	grpcService := grpc.NewService(appVersion, requestsState, environmentsState, protoFilesState)
 	restService := rest.New(requestsState, environmentsState, appVersion)
-	egressService := egress.New(requestsState, environmentsState, restService, grpcService, nil)
+	graphqlService := graphql.New(requestsState, environmentsState, appVersion)
+	egressService := egress.New(requestsState, environmentsState, restService, grpcService, graphqlService, nil)
 
 	modal := modallayer.NewModal()
 

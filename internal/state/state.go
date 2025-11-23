@@ -15,8 +15,9 @@ const (
 	SourceView        Source = "view"
 	SourceFile        Source = "file"
 	SourceController  Source = "controller"
-	SourceRestService Source = "rest-service"
-	SourceGRPCService Source = "grpc-service"
+	SourceRestService    Source = "rest-service"
+	SourceGRPCService    Source = "grpc-service"
+	SourceGraphQLService Source = "graphql-service"
 )
 
 var ErrNotFound = errors.New("ErrNotFound")

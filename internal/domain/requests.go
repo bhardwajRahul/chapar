@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	RequestTypeHTTP = "http"
-	RequestTypeGRPC = "grpc"
+	RequestTypeHTTP    = "http"
+	RequestTypeGRPC    = "grpc"
+	RequestTypeGraphQL = "graphql"
 
 	RequestMethodGET     = "GET"
 	RequestMethodPOST    = "POST"
@@ -82,8 +83,9 @@ func (r *Request) MarshalYaml() ([]byte, error) {
 }
 
 type ResponseDetail struct {
-	HTTP *HTTPResponseDetail
-	GRPC *GRPCResponseDetail
+	HTTP    *HTTPResponseDetail
+	GRPC    *GRPCResponseDetail
+	GraphQL *GraphQLResponseDetail
 }
 
 type RequestMeta struct {
@@ -93,8 +95,9 @@ type RequestMeta struct {
 }
 
 type RequestSpec struct {
-	GRPC *GRPCRequestSpec `yaml:"grpc,omitempty"`
-	HTTP *HTTPRequestSpec `yaml:"http,omitempty"`
+	GRPC    *GRPCRequestSpec    `yaml:"grpc,omitempty"`
+	HTTP    *HTTPRequestSpec    `yaml:"http,omitempty"`
+	GraphQL *GraphQLRequestSpec `yaml:"graphql,omitempty"`
 }
 
 func (r *RequestSpec) GetGRPC() *GRPCRequestSpec {
@@ -107,6 +110,13 @@ func (r *RequestSpec) GetGRPC() *GRPCRequestSpec {
 func (r *RequestSpec) GetHTTP() *HTTPRequestSpec {
 	if r.HTTP != nil {
 		return r.HTTP
+	}
+	return nil
+}
+
+func (r *RequestSpec) GetGraphQL() *GraphQLRequestSpec {
+	if r.GraphQL != nil {
+		return r.GraphQL
 	}
 	return nil
 }
@@ -135,6 +145,20 @@ func (h *HTTPRequestSpec) GetPreRequest() PreRequest {
 func (h *HTTPRequestSpec) GetPostRequest() PostRequest {
 	if h != nil {
 		return h.Request.PostRequest
+	}
+	return PostRequest{}
+}
+
+func (g *GraphQLRequestSpec) GetPreRequest() PreRequest {
+	if g != nil {
+		return g.PreRequest
+	}
+	return PreRequest{}
+}
+
+func (g *GraphQLRequestSpec) GetPostRequest() PostRequest {
+	if g != nil {
+		return g.PostRequest
 	}
 	return PostRequest{}
 }
@@ -332,6 +356,10 @@ func CompareRequests(a, b *Request) bool {
 	}
 
 	if !CompareHTTPRequestSpecs(a.Spec.HTTP, b.Spec.HTTP) {
+		return false
+	}
+
+	if !CompareGraphQLRequestSpecs(a.Spec.GraphQL, b.Spec.GraphQL) {
 		return false
 	}
 
@@ -541,5 +569,10 @@ func (r *Request) SetDefaultValues() {
 
 	if r.MetaData.Type == RequestTypeGRPC {
 		r.SetDefaultValuesForGRPC()
+		return
+	}
+
+	if r.MetaData.Type == RequestTypeGraphQL {
+		r.SetDefaultValuesForGraphQL()
 	}
 }

@@ -19,6 +19,10 @@ import (
 	_ "embed"
 )
 
+type Icon interface {
+	Layout(gtx layout.Context, color color.NRGBA) layout.Dimensions
+}
+
 //go:embed icons
 var svgIcons embed.FS
 
@@ -201,6 +205,12 @@ var Notifications *widget.Icon = func() *widget.Icon {
 
 var HorizontalSplitIcon *SvgIcon = loadSvgIcon("splitscreen_h")
 var VerticalSplitIcon *SvgIcon = loadSvgIcon("splitscreen_v")
+
+var GRPCIcon *SvgIcon = loadSvgIcon("grpc")
+var HTTPIcon *SvgIcon = loadSvgIcon("http")
+var GraphQLIcon *SvgIcon = loadSvgIcon("graphql")
+var CollectionIcon *SvgIcon = loadSvgIcon("collection")
+var TerminalIcon *SvgIcon = loadSvgIcon("terminal")
 
 type SvgIcon struct {
 	icon *giosvg.Icon

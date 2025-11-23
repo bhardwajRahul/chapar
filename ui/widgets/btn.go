@@ -55,10 +55,6 @@ type IconButtonStyle struct {
 	Description string
 }
 
-type Icon interface {
-	Layout(gtx layout.Context, color color.NRGBA) layout.Dimensions
-}
-
 func Button(th *material.Theme, button *widget.Clickable, icon Icon, iconPosition int, txt string) ButtonStyle {
 	b := ButtonStyle{
 		Text:         txt,

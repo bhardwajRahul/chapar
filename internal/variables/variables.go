@@ -165,6 +165,43 @@ func ApplyToHTTPRequest(variables map[string]string, req *domain.HTTPRequestSpec
 	}
 }
 
+// ApplyToGraphQLRequest apply variables to the request
+func ApplyToGraphQLRequest(variables map[string]string, req *domain.GraphQLRequestSpec) {
+	if variables == nil {
+		variables = GetVariables()
+	}
+
+	if req == nil {
+		return
+	}
+
+	// to through all the variables and replace them in the request
+	for k, v := range variables {
+		if strings.Contains(req.URL, "{{"+k+"}}") {
+			req.URL = strings.ReplaceAll(req.URL, "{{"+k+"}}", v)
+		}
+
+		// if value contain the variable in double curly braces then replace it
+		if strings.Contains(req.Query, "{{"+k+"}}") {
+			req.Query = strings.ReplaceAll(req.Query, "{{"+k+"}}", v)
+		}
+
+		if strings.Contains(req.Variables, "{{"+k+"}}") {
+			req.Variables = strings.ReplaceAll(req.Variables, "{{"+k+"}}", v)
+		}
+
+		for i, kv := range req.Headers {
+			if strings.Contains(kv.Value, "{{"+k+"}}") {
+				req.Headers[i].Value = strings.ReplaceAll(kv.Value, "{{"+k+"}}", v)
+			}
+		}
+
+		if req.Auth != (domain.Auth{}) {
+			ApplyToAuth(variables, &req.Auth)
+		}
+	}
+}
+
 func ApplyToAuth(variables map[string]string, auth *domain.Auth) {
 	if variables == nil {
 		variables = GetVariables()

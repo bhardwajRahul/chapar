@@ -12,6 +12,7 @@ import (
 
 	"github.com/chapar-rest/chapar/internal/domain"
 	"github.com/chapar-rest/chapar/internal/egress"
+	"github.com/chapar-rest/chapar/internal/graphql"
 	"github.com/chapar-rest/chapar/internal/grpc"
 	"github.com/chapar-rest/chapar/internal/importer"
 	"github.com/chapar-rest/chapar/internal/jsonpath"
@@ -215,6 +216,8 @@ func (c *Controller) onPostRequestSetChanged(id string, statusCode int, item, fr
 		clone.Spec.HTTP.Request.PostRequest.PostRequestSet = postRequestSet
 	case domain.RequestTypeGRPC:
 		clone.Spec.GRPC.PostRequest.PostRequestSet = postRequestSet
+	case domain.RequestTypeGraphQL:
+		clone.Spec.GraphQL.PostRequest.PostRequestSet = postRequestSet
 	default:
 		return // Unknown request type, exit early
 	}
@@ -251,6 +254,14 @@ func (c *Controller) onPostRequestSetChanged(id string, statusCode int, item, fr
 		metaData = responseData.ResponseMetadata
 		trailers = responseData.Trailers
 		responseFrom = clone.Spec.GRPC.PostRequest.PostRequestSet.From
+	case domain.RequestTypeGraphQL:
+		responseData := c.view.GetGraphQLResponse(id)
+		if responseData == nil || responseData.Response == "" {
+			return
+		}
+		response = responseData.Response
+		headers = responseData.ResponseHeaders
+		responseFrom = clone.Spec.GraphQL.PostRequest.PostRequestSet.From
 	}
 
 	switch responseFrom {
@@ -288,6 +299,8 @@ func (c *Controller) onSetOnTriggerRequestChanged(id, collectionID, requestID st
 		clone.Spec.HTTP.Request.PreRequest.TriggerRequest = triggerRequest
 	case domain.RequestTypeGRPC:
 		clone.Spec.GRPC.PreRequest.TriggerRequest = triggerRequest
+	case domain.RequestTypeGraphQL:
+		clone.Spec.GraphQL.PreRequest.TriggerRequest = triggerRequest
 	default:
 		return // Unknown request type, exit early
 	}
@@ -361,33 +374,74 @@ func (c *Controller) onSubmitRequest(id string) {
 	c.view.SetSendingRequestLoading(id)
 	defer c.view.SetSendingRequestLoaded(id)
 
-	egRes, err := c.egressService.Send(id, c.getActiveEnvID())
-	if err != nil {
-		c.view.SetHTTPResponse(id, domain.HTTPResponseDetail{
-			Error: err,
-		})
+	req := c.model.GetRequest(id)
+	if req == nil {
+		c.view.showError(fmt.Errorf("request with id %s not found", id))
 		return
 	}
 
-	res, ok := egRes.(*rest.Response)
-	if !ok {
-		panic("invalid response type")
+	egRes, err := c.egressService.Send(id, c.getActiveEnvID())
+	if err != nil {
+		// Handle error based on request type
+		if req.MetaData.Type == domain.RequestTypeHTTP {
+			c.view.SetHTTPResponse(id, domain.HTTPResponseDetail{
+				Error: err,
+			})
+		} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+			c.view.SetGraphQLResponse(id, domain.GraphQLResponseDetail{
+				Error: err,
+			})
+		} else if req.MetaData.Type == domain.RequestTypeGRPC {
+			c.view.SetGRPCResponse(id, domain.GRPCResponseDetail{
+				Error: err,
+			})
+		}
+		return
 	}
 
-	resp := string(res.Body)
-	if res.IsJSON {
-		resp = res.JSON
-	}
+	// Handle response based on request type
+	if req.MetaData.Type == domain.RequestTypeHTTP {
+		res, ok := egRes.(*rest.Response)
+		if !ok {
+			panic("invalid response type")
+		}
 
-	c.view.SetHTTPResponse(id, domain.HTTPResponseDetail{
-		Response:        resp,
-		ResponseHeaders: mapToKeyValue(res.ResponseHeaders),
-		RequestHeaders:  mapToKeyValue(res.RequestHeaders),
-		Cookies:         cookieToKeyValue(res.Cookies),
-		StatusCode:      res.StatusCode,
-		Duration:        res.TimePassed,
-		Size:            len(res.Body),
-	})
+		resp := string(res.Body)
+		if res.IsJSON {
+			resp = res.JSON
+		}
+
+		c.view.SetHTTPResponse(id, domain.HTTPResponseDetail{
+			Response:        resp,
+			ResponseHeaders: mapToKeyValue(res.ResponseHeaders),
+			RequestHeaders:  mapToKeyValue(res.RequestHeaders),
+			Cookies:         cookieToKeyValue(res.Cookies),
+			StatusCode:      res.StatusCode,
+			Duration:        res.TimePassed,
+			Size:            len(res.Body),
+		})
+	} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+		res, ok := egRes.(*graphql.Response)
+		if !ok {
+			panic("invalid response type")
+		}
+
+		resp := string(res.Body)
+		if res.IsJSON {
+			resp = res.JSON
+		}
+
+		c.view.SetGraphQLResponse(id, domain.GraphQLResponseDetail{
+			Response:        resp,
+			ResponseHeaders: mapToKeyValue(res.ResponseHeaders),
+			RequestHeaders:  mapToKeyValue(res.RequestHeaders),
+			StatusCode:      res.StatusCode,
+			Duration:        res.TimePassed,
+			Size:            len(res.Body),
+		})
+	} else if req.MetaData.Type == domain.RequestTypeGRPC {
+		// gRPC is handled separately in onGrpcInvoke
+	}
 }
 
 func cookieToKeyValue(cookies []*http.Cookie) []domain.KeyValue {
@@ -741,10 +795,15 @@ func (c *Controller) onCollectionTitleChange(id, title string) {
 
 func (c *Controller) onNewRequest(requestType string) {
 	var req *domain.Request
-	if requestType == domain.RequestTypeHTTP {
+	switch requestType {
+	case domain.RequestTypeHTTP:
 		req = domain.NewHTTPRequest("New Request")
-	} else {
+	case domain.RequestTypeGRPC:
 		req = domain.NewGRPCRequest("New Request")
+	case domain.RequestTypeGraphQL:
+		req = domain.NewGraphQLRequest("New Request")
+	default:
+		return
 	}
 
 	// Let the repository handle the creation details
@@ -903,10 +962,12 @@ func (c *Controller) onTreeViewMenuClicked(id, action string) {
 		case TypeCollection:
 			c.deleteCollection(id)
 		}
-	case MenuAddHTTPRequest, MenuAddGRPCRequest:
+	case MenuAddHTTPRequest, MenuAddGRPCRequest, MenuAddGraphQLRequest:
 		requestType := domain.RequestTypeHTTP
 		if action == MenuAddGRPCRequest {
 			requestType = domain.RequestTypeGRPC
+		} else if action == MenuAddGraphQLRequest {
+			requestType = domain.RequestTypeGraphQL
 		}
 
 		c.addRequestToCollection(id, requestType)
@@ -921,10 +982,15 @@ func (c *Controller) onTreeViewMenuClicked(id, action string) {
 
 func (c *Controller) addRequestToCollection(id string, requestType string) {
 	var req *domain.Request
-	if requestType == domain.RequestTypeHTTP {
+	switch requestType {
+	case domain.RequestTypeHTTP:
 		req = domain.NewHTTPRequest("New Request")
-	} else {
+	case domain.RequestTypeGRPC:
 		req = domain.NewGRPCRequest("New Request")
+	case domain.RequestTypeGraphQL:
+		req = domain.NewGraphQLRequest("New Request")
+	default:
+		return
 	}
 
 	col := c.model.GetCollection(id)
@@ -1128,10 +1194,13 @@ func (c *Controller) onRequestTabChange(id, tab string) {
 		preRequest *domain.PreRequest
 	)
 
-	if req.MetaData.Type == domain.RequestTypeHTTP {
+	switch req.MetaData.Type {
+	case domain.RequestTypeHTTP:
 		preRequest = &req.Spec.HTTP.Request.PreRequest
-	} else if req.MetaData.Type == domain.RequestTypeGRPC {
+	case domain.RequestTypeGRPC:
 		preRequest = &req.Spec.GRPC.PreRequest
+	case domain.RequestTypeGraphQL:
+		preRequest = &req.Spec.GraphQL.PreRequest
 	}
 
 	if preRequest == nil {

@@ -100,7 +100,7 @@ func (f *Footer) rightLayout(gtx layout.Context, theme *chapartheme.Theme) layou
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(5)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			btn := widgets.Button(theme.Material(), &f.ConsoleClickable, widgets.ConsoleIcon, widgets.IconPositionStart, "Console")
+			btn := widgets.Button(theme.Material(), &f.ConsoleClickable, widgets.TerminalIcon, widgets.IconPositionStart, "Console")
 			btn.Background = theme.Palette.Bg
 			btn.TextSize = unit.Sp(12)
 			btn.IconSize = unit.Sp(12)

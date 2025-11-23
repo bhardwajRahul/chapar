@@ -70,3 +70,21 @@ type RestContainer interface {
 	SetOnRequestTabChange(f func(id, tab string))
 	SetCollection(collection *domain.Collection)
 }
+
+type GraphQLContainer interface {
+	Container
+	SetGraphQLResponse(response domain.GraphQLResponseDetail)
+	GetGraphQLResponse() *domain.GraphQLResponseDetail
+	SetPostRequestSetPreview(preview string)
+	ShowSendingRequestLoading()
+	HideSendingRequestLoading()
+	SetURL(url string)
+	SetPostRequestSetValues(set domain.PostRequestSet)
+	SetOnPostRequestSetChanged(f func(id string, statusCode int, item, from, fromKey string))
+	SetPreRequestCollections(collections []*domain.Collection, selectedID string)
+	SetPreRequestRequests(requests []*domain.Request, selectedID string)
+	SetOnSetOnTriggerRequestChanged(f func(id, collectionID, requestID string))
+	SetOnRequestTabChange(f func(id, tab string))
+	SetCollection(collection *domain.Collection)
+	SetOnCopyResponse(f func(gtx layout.Context, dataType, data string))
+}
