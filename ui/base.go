@@ -51,7 +51,7 @@ type Base struct {
 	Executor scripting.Executor
 }
 
-func NewBase(appVersion string, w *app.Window, navi *navigator.Navigator) (*Base, error) {
+func NewBase(w *app.Window, navi *navigator.Navigator) (*Base, error) {
 	fontCollection, err := fonts.Prepare()
 	if err != nil {
 		return nil, err
@@ -79,9 +79,9 @@ func NewBase(appVersion string, w *app.Window, navi *navigator.Navigator) (*Base
 	}
 
 	// init services
-	grpcService := grpc.NewService(appVersion, requestsState, environmentsState, protoFilesState)
-	restService := rest.New(requestsState, environmentsState, appVersion)
-	graphqlService := graphql.New(requestsState, environmentsState, appVersion)
+	grpcService := grpc.NewService(requestsState, environmentsState, protoFilesState)
+	restService := rest.New(requestsState, environmentsState)
+	graphqlService := graphql.New(requestsState, environmentsState)
 	egressService := egress.New(requestsState, environmentsState, restService, grpcService, graphqlService, nil)
 
 	modal := modallayer.NewModal()

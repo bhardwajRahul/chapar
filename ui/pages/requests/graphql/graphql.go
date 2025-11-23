@@ -8,7 +8,6 @@ import (
 	"github.com/chapar-rest/chapar/internal/domain"
 	"github.com/chapar-rest/chapar/internal/prefs"
 	"github.com/chapar-rest/chapar/ui/chapartheme"
-	"github.com/chapar-rest/chapar/ui/converter"
 	"github.com/chapar-rest/chapar/ui/explorer"
 	"github.com/chapar-rest/chapar/ui/pages/requests/component"
 	"github.com/chapar-rest/chapar/ui/widgets"
@@ -63,7 +62,7 @@ func New(req *domain.Request, theme *chapartheme.Theme, explorer *explorer.Explo
 			BarWidth: unit.Dp(2),
 		},
 		AddressBar: NewAddressBar(req.Spec.GraphQL.URL),
-		Actions:    component.NewActions(true),
+		Actions:    component.NewActions(false),
 		Request:    NewRequest(req, explorer, theme),
 		Response:   NewResponse(theme),
 	}
@@ -77,7 +76,6 @@ func (g *GraphQL) setupHooks() {
 	g.AddressBar.SetOnURLChanged(func(url string) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.URL = url
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.URL = url
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -89,7 +87,6 @@ func (g *GraphQL) setupHooks() {
 	g.Request.Query.SetOnChanged(func(data string) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.Query = data
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.Query = data
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -97,24 +94,20 @@ func (g *GraphQL) setupHooks() {
 	g.Request.Variables.SetOnChanged(func(data string) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.Variables = data
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.Variables = data
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
 
-	g.Request.Headers.SetOnChanged(func(items []*widgets.KeyValueItem) {
-		data := converter.KeyValueFromWidgetItems(items)
+	g.Request.Headers.SetOnChange(func(headers []domain.KeyValue) {
 		clone := g.Req.Clone()
-		clone.Spec.GraphQL.Headers = data
-		// Update g.Req to reflect the change for UI consistency
-		g.Req.Spec.GraphQL.Headers = data
+		clone.Spec.GraphQL.Headers = headers
+		g.Req.Spec.GraphQL.Headers = headers
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
 
 	g.Request.Auth.SetOnChange(func(auth domain.Auth) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.Auth = auth
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.Auth = auth
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -122,7 +115,6 @@ func (g *GraphQL) setupHooks() {
 	g.Request.PreRequest.SetOnDropDownChanged(func(selected string) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.PreRequest.Type = selected
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.PreRequest.Type = selected
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -130,7 +122,6 @@ func (g *GraphQL) setupHooks() {
 	g.Request.PreRequest.SetOnScriptChanged(func(code string) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.PreRequest.Script = code
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.PreRequest.Script = code
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -138,7 +129,6 @@ func (g *GraphQL) setupHooks() {
 	g.Request.PostRequest.SetOnDropDownChanged(func(selected string) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.PostRequest.Type = selected
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.PostRequest.Type = selected
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -146,7 +136,6 @@ func (g *GraphQL) setupHooks() {
 	g.Request.PostRequest.SetOnScriptChanged(func(code string) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.PostRequest.Script = code
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.PostRequest.Script = code
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -154,7 +143,6 @@ func (g *GraphQL) setupHooks() {
 	g.Request.VariablesList.SetOnChanged(func(items []domain.Variable) {
 		clone := g.Req.Clone()
 		clone.Spec.GraphQL.VariablesList = items
-		// Update g.Req to reflect the change for UI consistency
 		g.Req.Spec.GraphQL.VariablesList = items
 		g.onDataChanged(g.Req.MetaData.ID, clone)
 	})
@@ -216,7 +204,7 @@ func (g *GraphQL) SetOnCopyResponse(f func(gtx layout.Context, dataType, data st
 func (g *GraphQL) SetGraphQLResponse(detail domain.GraphQLResponseDetail) {
 	g.Request.VariablesList.SetResponseDetail(&domain.ResponseDetail{GraphQL: &detail})
 	g.Response.SetResponse(detail.Response)
-	g.Response.SetHeaders(nil, detail.ResponseHeaders)
+	g.Response.SetHeaders(detail.RequestHeaders, detail.ResponseHeaders)
 	g.Response.SetError(detail.Error)
 	g.Response.SetStatusParams(detail.StatusCode, detail.Duration, detail.Size)
 }
@@ -264,10 +252,15 @@ func (g *GraphQL) SetURL(url string) {
 
 func (g *GraphQL) SetCollection(collection *domain.Collection) {
 	// GraphQL can inherit headers and auth from collection
-	if collection != nil {
-		// Headers inheritance would be handled similar to REST
-		// For now, we'll just store the collection reference
+	if collection == nil {
+		return
 	}
+
+	// Set collection headers for inheritance
+	g.Request.Headers.SetCollectionHeaders(collection.Spec.Headers)
+
+	// Set collection auth for inheritance
+	g.Request.Auth.SetCollectionAuth(&collection.Spec.Auth)
 }
 
 func (g *GraphQL) Layout(gtx layout.Context, theme *chapartheme.Theme) layout.Dimensions {

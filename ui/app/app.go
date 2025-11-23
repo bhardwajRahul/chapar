@@ -27,12 +27,12 @@ type App struct {
 	*BaseLayout
 }
 
-func NewApp(w *app.Window, appVersion string) (*App, error) {
+func NewApp(w *app.Window) (*App, error) {
 	// init notification system
 	notifications.New(w)
 
 	navi := navigator.New()
-	base, err := ui.NewBase(appVersion, w, navi)
+	base, err := ui.NewBase(w, navi)
 	if err != nil {
 		return nil, err
 	}

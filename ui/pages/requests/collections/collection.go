@@ -15,7 +15,6 @@ import (
 	"github.com/chapar-rest/chapar/ui/chapartheme"
 	"github.com/chapar-rest/chapar/ui/keys"
 	"github.com/chapar-rest/chapar/ui/pages/requests/component"
-	"github.com/chapar-rest/chapar/ui/pages/requests/restful"
 	"github.com/chapar-rest/chapar/ui/widgets"
 )
 
@@ -28,7 +27,7 @@ type Collection struct {
 	prompt *widgets.Prompt
 
 	Tabs    *widgets.Tabs
-	Headers *restful.Headers
+	Headers *component.Headers
 	Auth    *component.Auth
 
 	notesEditor widget.Editor
@@ -77,7 +76,7 @@ func New(collection *domain.Collection, theme *chapartheme.Theme) *Collection {
 			{Title: "Auth"},
 			{Title: "Headers"},
 		}, nil),
-		Headers: restful.NewHeaders(collection.Spec.Headers),
+		Headers: component.NewHeaders(collection.Spec.Headers),
 		Auth:    component.NewAuth(collection.Spec.Auth, theme),
 		split: widgets.SplitView{
 			Resize: giox.Resize{

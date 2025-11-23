@@ -1,4 +1,4 @@
-package restful
+package component
 
 import (
 	"strings"

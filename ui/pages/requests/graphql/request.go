@@ -6,7 +6,6 @@ import (
 
 	"github.com/chapar-rest/chapar/internal/domain"
 	"github.com/chapar-rest/chapar/ui/chapartheme"
-	"github.com/chapar-rest/chapar/ui/converter"
 	"github.com/chapar-rest/chapar/ui/explorer"
 	"github.com/chapar-rest/chapar/ui/pages/requests/component"
 	"github.com/chapar-rest/chapar/ui/widgets"
@@ -21,7 +20,7 @@ type Request struct {
 
 	Query         *codeeditor.CodeEditor
 	Variables     *codeeditor.CodeEditor
-	Headers       *widgets.KeyValue
+	Headers       *component.Headers
 	VariablesList *component.Variables
 	Auth          *component.Auth
 
@@ -57,19 +56,18 @@ func NewRequest(req *domain.Request, explorer *explorer.Explorer, theme *chapart
 		}, postRequestDropDown, theme),
 		Query:         codeeditor.NewCodeEditor("", codeeditor.CodeLanguageGraphQL, theme),
 		Variables:     codeeditor.NewCodeEditor("{}", codeeditor.CodeLanguageJSON, theme),
-		Headers:       widgets.NewKeyValue(),
+		Headers:       component.NewHeaders(nil),
 		VariablesList: component.NewVariables(theme, domain.RequestTypeGraphQL),
 		Auth:          component.NewAuth(domain.Auth{}, theme),
 	}
 
-	r.Query.WithBeautifier(true)
 	r.Variables.WithBeautifier(true)
 
 	if req.Spec != (domain.RequestSpec{}) && req.Spec.GraphQL != nil {
 		r.Query.SetCode(req.Spec.GraphQL.Query)
 		r.Variables.SetCode(req.Spec.GraphQL.Variables)
 		if len(req.Spec.GraphQL.Headers) > 0 {
-			r.Headers.SetItems(converter.WidgetItemsFromKeyValue(req.Spec.GraphQL.Headers))
+			r.Headers.SetHeaders(req.Spec.GraphQL.Headers)
 		}
 
 		if req.Spec.GraphQL.Auth != (domain.Auth{}) {
@@ -131,7 +129,7 @@ func (r *Request) Layout(gtx layout.Context, theme *chapartheme.Theme) layout.Di
 					})
 				case "Headers":
 					return layout.Inset{Top: unit.Dp(5), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return r.Headers.WithAddLayout(gtx, "Headers", "", theme)
+						return r.Headers.Layout(gtx, theme)
 					})
 				case "Auth":
 					return r.Auth.Layout(gtx, theme)

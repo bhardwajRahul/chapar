@@ -18,11 +18,7 @@ type CreateModal struct {
 	CloseBtn  widget.Clickable
 
 	Items []*CreateItem
-	list  *widget.List
-
-	initiated bool
-	flow      outlay.FlowWrap
-	items     []outlay.FlowElement
+	flow  outlay.FlowWrap
 }
 
 type CreateItem struct {

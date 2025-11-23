@@ -19,7 +19,7 @@ type Request struct {
 
 	Body      *Body
 	Params    *Params
-	Headers   *Headers
+	Headers   *component.Headers
 	Variables *component.Variables
 	Auth      *component.Auth
 
@@ -61,7 +61,7 @@ func NewRequest(req *domain.Request, explorer *explorer.Explorer, theme *chapart
 
 		Body:      NewBody(req.Spec.HTTP.Request.Body, theme, explorer),
 		Params:    NewParams(nil, nil),
-		Headers:   NewHeaders(nil),
+		Headers:   component.NewHeaders(nil),
 		Auth:      component.NewAuth(req.Spec.HTTP.Request.Auth, theme),
 		Variables: component.NewVariables(theme, domain.RequestTypeHTTP),
 	}

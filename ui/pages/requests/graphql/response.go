@@ -194,4 +194,3 @@ func (r *Response) handleCopy(gtx layout.Context) {
 func (r *Response) GetResponse() string {
 	return r.response
 }
-

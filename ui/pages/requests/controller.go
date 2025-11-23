@@ -383,15 +383,16 @@ func (c *Controller) onSubmitRequest(id string) {
 	egRes, err := c.egressService.Send(id, c.getActiveEnvID())
 	if err != nil {
 		// Handle error based on request type
-		if req.MetaData.Type == domain.RequestTypeHTTP {
+		switch req.MetaData.Type {
+		case domain.RequestTypeHTTP:
 			c.view.SetHTTPResponse(id, domain.HTTPResponseDetail{
 				Error: err,
 			})
-		} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+		case domain.RequestTypeGraphQL:
 			c.view.SetGraphQLResponse(id, domain.GraphQLResponseDetail{
 				Error: err,
 			})
-		} else if req.MetaData.Type == domain.RequestTypeGRPC {
+		case domain.RequestTypeGRPC:
 			c.view.SetGRPCResponse(id, domain.GRPCResponseDetail{
 				Error: err,
 			})
@@ -420,7 +421,11 @@ func (c *Controller) onSubmitRequest(id string) {
 			Duration:        res.TimePassed,
 			Size:            len(res.Body),
 		})
-	} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+
+		return
+	}
+
+	if req.MetaData.Type == domain.RequestTypeGraphQL {
 		res, ok := egRes.(*graphql.Response)
 		if !ok {
 			panic("invalid response type")
@@ -439,8 +444,6 @@ func (c *Controller) onSubmitRequest(id string) {
 			Duration:        res.TimePassed,
 			Size:            len(res.Body),
 		})
-	} else if req.MetaData.Type == domain.RequestTypeGRPC {
-		// gRPC is handled separately in onGrpcInvoke
 	}
 }
 

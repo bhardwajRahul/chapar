@@ -57,13 +57,14 @@ func (s *Service) Send(id, activeEnvironmentID string) (any, error) {
 
 	var res any
 	var err error
-	if req.MetaData.Type == domain.RequestTypeHTTP {
+	switch req.MetaData.Type {
+	case domain.RequestTypeHTTP:
 		res, err = s.rest.SendRequest(req.MetaData.ID, activeEnvironmentID)
-	} else if req.MetaData.Type == domain.RequestTypeGRPC {
+	case domain.RequestTypeGRPC:
 		res, err = s.grpc.Invoke(req.MetaData.ID, activeEnvironmentID)
-	} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+	case domain.RequestTypeGraphQL:
 		res, err = s.graphql.SendRequest(req.MetaData.ID, activeEnvironmentID)
-	} else {
+	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.MetaData.Type)
 	}
 
@@ -85,13 +86,14 @@ func (s *Service) Send(id, activeEnvironmentID string) (any, error) {
 
 func (s *Service) preRequest(req *domain.Request, activeEnvironmentID string) error {
 	var preReq domain.PreRequest
-	if req.MetaData.Type == domain.RequestTypeHTTP {
+	switch req.MetaData.Type {
+	case domain.RequestTypeHTTP:
 		preReq = req.Spec.GetHTTP().GetPreRequest()
-	} else if req.MetaData.Type == domain.RequestTypeGRPC {
+	case domain.RequestTypeGRPC:
 		preReq = req.Spec.GetGRPC().GetPreRequest()
-	} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+	case domain.RequestTypeGraphQL:
 		preReq = req.Spec.GetGraphQL().GetPreRequest()
-	} else {
+	default:
 		return nil
 	}
 

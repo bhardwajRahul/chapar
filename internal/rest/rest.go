@@ -2,7 +2,6 @@ package rest
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -18,7 +17,9 @@ import (
 	"github.com/chapar-rest/chapar/internal/domain"
 	"github.com/chapar-rest/chapar/internal/prefs"
 	"github.com/chapar-rest/chapar/internal/state"
+	"github.com/chapar-rest/chapar/internal/util"
 	"github.com/chapar-rest/chapar/internal/variables"
+	"github.com/chapar-rest/chapar/version"
 )
 
 type Response struct {
@@ -37,11 +38,9 @@ type Response struct {
 type Service struct {
 	requests     *state.Requests
 	environments *state.Environments
-
-	appVersion string
 }
 
-func New(requests *state.Requests, environments *state.Environments, appVersion string) *Service {
+func New(requests *state.Requests, environments *state.Environments) *Service {
 	return &Service{
 		requests:     requests,
 		environments: environments,
@@ -228,7 +227,7 @@ func (s *Service) sendRequest(req *domain.HTTPRequestSpec, e *domain.Environment
 	}
 
 	if globalConfig.Spec.General.SendChaparAgentHeader {
-		httpReq.Header.Add("User-Agent", "Chapar/"+s.appVersion)
+		httpReq.Header.Add("User-Agent", version.GetAgentName())
 	}
 
 	res, err := http.DefaultClient.Do(httpReq)
@@ -256,9 +255,9 @@ func (s *Service) sendRequest(req *domain.HTTPRequestSpec, e *domain.Environment
 		IsJSON:          false,
 	}
 
-	if IsJSON(string(body)) {
+	if util.IsJSON(string(body)) {
 		response.IsJSON = true
-		if js, err := PrettyJSON(body); err != nil {
+		if js, err := util.PrettyJSON(body); err != nil {
 			return nil, err
 		} else {
 			response.JSON = js
@@ -373,51 +372,4 @@ func (s *Service) applyBody(req *domain.HTTPRequestSpec, httpReq *http.Request) 
 	}
 
 	return nil
-}
-
-func IsJSON(s string) bool {
-	var js interface{}
-	return json.Unmarshal([]byte(s), &js) == nil
-}
-
-func PrettyJSON(data []byte) (string, error) {
-	// First, unmarshal to decode Unicode escape sequences (e.g., \u00f3 -> ó)
-	var js interface{}
-	if err := json.Unmarshal(data, &js); err != nil {
-		return "", err
-	}
-
-	// Then marshal back with indentation, which will properly encode Unicode characters
-	// without unnecessary escaping for common characters
-	out := bytes.Buffer{}
-	encoder := json.NewEncoder(&out)
-	encoder.SetIndent("", "    ")
-	encoder.SetEscapeHTML(false) // Don't escape HTML characters like <, >, &
-	if err := encoder.Encode(js); err != nil {
-		return "", err
-	}
-
-	// Remove trailing newline added by Encode
-	result := out.String()
-	if len(result) > 0 && result[len(result)-1] == '\n' {
-		result = result[:len(result)-1]
-	}
-
-	return result, nil
-}
-
-func ParseJSON(text string) (map[string]any, error) {
-	var js map[string]any
-	if err := json.Unmarshal([]byte(text), &js); err != nil {
-		return nil, err
-	}
-	return js, nil
-}
-
-func EncodeJSON(data any) ([]byte, error) {
-	b, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
 }

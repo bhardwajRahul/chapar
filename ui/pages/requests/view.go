@@ -1034,17 +1034,20 @@ func (v *View) addTreeViewNode(parentID string, req *domain.Request) {
 }
 
 func setNodePrefix(req *domain.Request, node *widgets.TreeNode) {
-	if req.MetaData.Type == domain.RequestTypeGRPC {
+
+	switch req.MetaData.Type {
+	case domain.RequestTypeGRPC:
 		node.Prefix = "gRPC"
 		node.PrefixColor = chapartheme.GetRequestPrefixColor("gRPC")
-	} else if req.MetaData.Type == domain.RequestTypeGraphQL {
+	case domain.RequestTypeGraphQL:
 		node.Prefix = "GraphQL"
 		node.PrefixColor = chapartheme.GetRequestPrefixColor("GraphQL")
-	} else if req.MetaData.Type == domain.RequestTypeHTTP && req.Spec.HTTP != nil {
-		node.Prefix = req.Spec.HTTP.Method
-		node.PrefixColor = chapartheme.GetRequestPrefixColor(req.Spec.HTTP.Method)
-	} else {
-		// Fallback for unknown types or missing spec
+	case domain.RequestTypeHTTP:
+		if req.Spec.HTTP != nil {
+			node.Prefix = req.Spec.HTTP.Method
+			node.PrefixColor = chapartheme.GetRequestPrefixColor(req.Spec.HTTP.Method)
+		}
+	default:
 		node.Prefix = req.MetaData.Type
 		node.PrefixColor = chapartheme.GetRequestPrefixColor(req.MetaData.Type)
 	}

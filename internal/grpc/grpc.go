@@ -29,6 +29,7 @@ import (
 	"github.com/chapar-rest/chapar/internal/safemap"
 	"github.com/chapar-rest/chapar/internal/state"
 	"github.com/chapar-rest/chapar/internal/variables"
+	"github.com/chapar-rest/chapar/version"
 )
 
 var (
@@ -36,8 +37,6 @@ var (
 )
 
 type Service struct {
-	appVersion string
-
 	requests     *state.Requests
 	environments *state.Environments
 	protoFiles   *state.ProtoFiles
@@ -58,13 +57,8 @@ type Response struct {
 	Status     string
 }
 
-var (
-	appName = "Chapar"
-)
-
-func NewService(appVersion string, requests *state.Requests, envs *state.Environments, protoFiles *state.ProtoFiles) *Service {
+func NewService(requests *state.Requests, envs *state.Environments, protoFiles *state.ProtoFiles) *Service {
 	return &Service{
-		appVersion:         appVersion,
 		requests:           requests,
 		environments:       envs,
 		protoFiles:         protoFiles,
@@ -74,7 +68,7 @@ func NewService(appVersion string, requests *state.Requests, envs *state.Environ
 
 func (s *Service) Dial(req *domain.GRPCRequestSpec) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
-		grpc.WithUserAgent(fmt.Sprintf("%s/%s", appName, s.appVersion)),
+		grpc.WithUserAgent(version.GetAgentName()),
 	}
 
 	if !req.Settings.Insecure {
