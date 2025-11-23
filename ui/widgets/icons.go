@@ -211,6 +211,7 @@ var HTTPIcon *SvgIcon = loadSvgIcon("http")
 var GraphQLIcon *SvgIcon = loadSvgIcon("graphql")
 var CollectionIcon *SvgIcon = loadSvgIcon("collection")
 var TerminalIcon *SvgIcon = loadSvgIcon("terminal")
+var FormatIcon *SvgIcon = loadSvgIcon("format")
 
 type SvgIcon struct {
 	icon *giosvg.Icon

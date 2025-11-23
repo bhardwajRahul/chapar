@@ -370,7 +370,7 @@ func (c *CodeEditor) beautyButton(gtx layout.Context, theme *chapartheme.Theme) 
 
 	return layout.Inset{Bottom: unit.Dp(4), Right: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.SE.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			btn := widgets.Button(theme.Material(), &c.beatufier, widgets.CleanIcon, widgets.IconPositionStart, "Beautify")
+			btn := widgets.Button(theme.Material(), &c.beatufier, widgets.FormatIcon, widgets.IconPositionStart, "Beautify")
 			btn.Color = theme.ButtonTextColor
 			btn.Inset = layout.Inset{
 				Top: 4, Bottom: 4,
