@@ -8,10 +8,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type RequestType string
+
 const (
-	RequestTypeHTTP    = "http"
-	RequestTypeGRPC    = "grpc"
-	RequestTypeGraphQL = "graphql"
+	RequestTypeHTTP    RequestType = "http"
+	RequestTypeGRPC    RequestType = "grpc"
+	RequestTypeGraphQL RequestType = "graphql"
 
 	RequestMethodGET     = "GET"
 	RequestMethodPOST    = "POST"
@@ -89,9 +91,9 @@ type ResponseDetail struct {
 }
 
 type RequestMeta struct {
-	ID   string `yaml:"id"`
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
+	ID   string      `yaml:"id"`
+	Name string      `yaml:"name"`
+	Type RequestType `yaml:"type"`
 }
 
 type RequestSpec struct {
@@ -112,6 +114,74 @@ func (r *RequestSpec) GetHTTP() *HTTPRequestSpec {
 		return r.HTTP
 	}
 	return nil
+}
+
+func (r *RequestSpec) GetPreRequest() PreRequest {
+	if r.HTTP != nil {
+		return r.HTTP.GetPreRequest()
+	}
+	if r.GRPC != nil {
+		return r.GRPC.GetPreRequest()
+	}
+	if r.GraphQL != nil {
+		return r.GraphQL.GetPreRequest()
+	}
+	return PreRequest{}
+}
+
+func DoablePreRequest(preReq PreRequest) bool {
+	if preReq == (PreRequest{}) {
+		return false
+	}
+
+	if preReq.TriggerRequest != nil && preReq.TriggerRequest.RequestID != "none" {
+		return true
+	}
+
+	if preReq.SShTunnel != nil && !preReq.SShTunnel.IsValid() {
+		return false
+	}
+
+	if preReq.KubernetesTunnel != nil && !preReq.KubernetesTunnel.IsValid() {
+		return false
+	}
+
+	return true
+}
+
+func DoablePostRequest(postReq PostRequest) bool {
+	if postReq == (PostRequest{}) {
+		return false
+	}
+
+	return postReq.IsValid()
+}
+
+func (r *RequestSpec) GetPostRequest() PostRequest {
+	if r.HTTP != nil {
+		return r.HTTP.GetPostRequest()
+	}
+	if r.GRPC != nil {
+		return r.GRPC.GetPostRequest()
+	}
+
+	if r.GraphQL != nil {
+		return r.GraphQL.GetPostRequest()
+	}
+	return PostRequest{}
+}
+
+func (r *RequestSpec) GetVariables() []Variable {
+	if r.HTTP != nil {
+		return r.HTTP.Request.Variables
+	}
+	if r.GRPC != nil {
+		return r.GRPC.Variables
+	}
+	if r.GraphQL != nil {
+		return r.GraphQL.VariablesList
+	}
+	return []Variable{}
 }
 
 func (r *RequestSpec) GetGraphQL() *GraphQLRequestSpec {
@@ -309,6 +379,30 @@ type SShTunnel struct {
 	TargetPort int `yaml:"targetPort"`
 
 	Flags []string `yaml:"flags"`
+}
+
+func (ssh *SShTunnel) IsValid() bool {
+	return ssh.Host != "" && ssh.Port > 0 && ssh.User != "" && ssh.Password != "" && ssh.KeyPath != "" && ssh.LocalPort > 0 && ssh.TargetPort > 0
+}
+
+func (kt *KubernetesTunnel) IsValid() bool {
+	return kt.Target != "" && kt.TargetType != "" && kt.LocalPort > 0 && kt.TargetPort > 0
+}
+
+func (tr *TriggerRequest) IsValid() bool {
+	return tr.CollectionID != "" && tr.RequestID != ""
+}
+
+func (pr *PostRequest) IsValid() bool {
+	return pr.Type != "" && pr.Script != "" && pr.PostRequestSet.IsValid()
+}
+
+func (ps *PostRequestSet) IsValid() bool {
+	return ps.Target != "" && ps.StatusCode > 0 && (ps.From == PostRequestSetFromResponseHeader ||
+		ps.From == PostRequestSetFromResponseBody ||
+		ps.From == PostRequestSetFromResponseCookie ||
+		ps.From == PostRequestSetFromResponseMetaData ||
+		ps.From == PostRequestSetFromResponseTrailers)
 }
 
 type VariableFrom string

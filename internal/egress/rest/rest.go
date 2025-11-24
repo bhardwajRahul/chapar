@@ -15,25 +15,13 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/chapar-rest/chapar/internal/domain"
+	"github.com/chapar-rest/chapar/internal/egress"
 	"github.com/chapar-rest/chapar/internal/prefs"
 	"github.com/chapar-rest/chapar/internal/state"
 	"github.com/chapar-rest/chapar/internal/util"
 	"github.com/chapar-rest/chapar/internal/variables"
 	"github.com/chapar-rest/chapar/version"
 )
-
-type Response struct {
-	StatusCode      int
-	ResponseHeaders map[string]string
-	RequestHeaders  map[string]string
-	Cookies         []*http.Cookie
-	Body            []byte
-
-	TimePassed time.Duration
-
-	IsJSON bool
-	JSON   string
-}
 
 type Service struct {
 	requests     *state.Requests
@@ -47,7 +35,7 @@ func New(requests *state.Requests, environments *state.Environments) *Service {
 	}
 }
 
-func (s *Service) SendRequest(requestID, activeEnvironmentID string) (*Response, error) {
+func (s *Service) SendRequest(requestID, activeEnvironmentID string) (*egress.Response, error) {
 	req := s.requests.GetRequest(requestID)
 	if req == nil {
 		return nil, fmt.Errorf("request with id %s not found", requestID)
@@ -123,7 +111,7 @@ func (s *Service) mergeHeaders(collectionHeaders, requestHeaders []domain.KeyVal
 	return merged
 }
 
-func (s *Service) sendRequest(req *domain.HTTPRequestSpec, e *domain.Environment) (*Response, error) {
+func (s *Service) sendRequest(req *domain.HTTPRequestSpec, e *domain.Environment) (*egress.Response, error) {
 	// prepare request
 	// - apply environment
 	// - apply variables
@@ -245,7 +233,7 @@ func (s *Service) sendRequest(req *domain.HTTPRequestSpec, e *domain.Environment
 	elapsed := time.Since(start)
 
 	// handle response
-	response := &Response{
+	response := &egress.Response{
 		StatusCode:      res.StatusCode,
 		ResponseHeaders: map[string]string{},
 		RequestHeaders:  map[string]string{},

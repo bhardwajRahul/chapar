@@ -64,7 +64,7 @@ func NewBaseLayout(base *ui.Base) (*BaseLayout, error) {
 		return nil, err
 	}
 
-	requestsController := requests.NewController(requestsView, base.Repository, base.RequestsState, base.EnvironmentsState, base.Explorer, base.EgressService, base.GrpcService)
+	requestsController := requests.NewController(requestsView, base.Repository, base.RequestsState, base.EnvironmentsState, base.Explorer, base.EgressService, base.GrpcDiscorvery)
 	if err := requestsController.LoadData(); err != nil {
 		return nil, err
 	}

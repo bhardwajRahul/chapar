@@ -12,12 +12,10 @@ import (
 
 	"github.com/chapar-rest/chapar/internal/domain"
 	"github.com/chapar-rest/chapar/internal/egress"
-	"github.com/chapar-rest/chapar/internal/graphql"
-	"github.com/chapar-rest/chapar/internal/grpc"
+	"github.com/chapar-rest/chapar/internal/egress/grpc"
 	"github.com/chapar-rest/chapar/internal/importer"
 	"github.com/chapar-rest/chapar/internal/jsonpath"
 	"github.com/chapar-rest/chapar/internal/repository"
-	"github.com/chapar-rest/chapar/internal/rest"
 	"github.com/chapar-rest/chapar/internal/state"
 	"github.com/chapar-rest/chapar/ui/explorer"
 	"github.com/chapar-rest/chapar/ui/notifications"
@@ -159,13 +157,13 @@ func (c *Controller) onGrpcInvoke(id string) {
 		return
 	}
 
-	resp, ok := res.(*grpc.Response)
+	resp, ok := res.(*egress.Response)
 	if !ok {
 		panic("invalid response type")
 	}
 
 	c.view.SetGRPCResponse(id, domain.GRPCResponseDetail{
-		Response:         resp.Body,
+		Response:         string(resp.Body),
 		ResponseMetadata: resp.ResponseMetadata,
 		RequestMetadata:  resp.RequestMetadata,
 		Trailers:         resp.Trailers,
@@ -402,7 +400,7 @@ func (c *Controller) onSubmitRequest(id string) {
 
 	// Handle response based on request type
 	if req.MetaData.Type == domain.RequestTypeHTTP {
-		res, ok := egRes.(*rest.Response)
+		res, ok := egRes.(*egress.Response)
 		if !ok {
 			panic("invalid response type")
 		}
@@ -426,7 +424,7 @@ func (c *Controller) onSubmitRequest(id string) {
 	}
 
 	if req.MetaData.Type == domain.RequestTypeGraphQL {
-		res, ok := egRes.(*graphql.Response)
+		res, ok := egRes.(*egress.Response)
 		if !ok {
 			panic("invalid response type")
 		}
@@ -529,7 +527,7 @@ func (c *Controller) onRequestDataChanged(id string, data any) {
 
 func (c *Controller) checkForPreRequestParams(id string, req *domain.Request, inComingRequest *domain.Request) {
 	var (
-		reqType        string
+		reqType        domain.RequestType
 		preReq         *domain.PreRequest
 		incomingPreReq *domain.PreRequest
 	)
@@ -796,7 +794,7 @@ func (c *Controller) onCollectionTitleChange(id, title string) {
 	c.view.SetContainerTitle(id, col.MetaData.Name)
 }
 
-func (c *Controller) onNewRequest(requestType string) {
+func (c *Controller) onNewRequest(requestType domain.RequestType) {
 	var req *domain.Request
 	switch requestType {
 	case domain.RequestTypeHTTP:
@@ -983,7 +981,7 @@ func (c *Controller) onTreeViewMenuClicked(id, action string) {
 	}
 }
 
-func (c *Controller) addRequestToCollection(id string, requestType string) {
+func (c *Controller) addRequestToCollection(id string, requestType domain.RequestType) {
 	var req *domain.Request
 	switch requestType {
 	case domain.RequestTypeHTTP:

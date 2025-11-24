@@ -20,9 +20,7 @@ import (
 type Variables struct {
 	theme *chapartheme.Theme
 
-	// TODO define request type as enum
-	// it ca nbe either http or grpc
-	requestType string
+	requestType domain.RequestType
 
 	Items     []*Variable
 	addButton *widgets.IconButton
@@ -55,7 +53,7 @@ type Variable struct {
 	deleteButton widget.Clickable
 }
 
-func NewVariables(theme *chapartheme.Theme, requestType string, items ...*Variable) *Variables {
+func NewVariables(theme *chapartheme.Theme, requestType domain.RequestType, items ...*Variable) *Variables {
 	f := &Variables{
 		theme:       theme,
 		requestType: requestType,

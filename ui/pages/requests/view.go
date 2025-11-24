@@ -28,10 +28,10 @@ import (
 var (
 	_ navigator.View = &View{}
 
-	newGRPCRequest    = modals.NewCreateItem(domain.RequestTypeGRPC, widgets.GRPCIcon, "GRPC")
-	newHTTPRequest    = modals.NewCreateItem(domain.RequestTypeHTTP, widgets.HTTPIcon, "HTTP")
-	newGraphQLRequest = modals.NewCreateItem(domain.RequestTypeGraphQL, widgets.GraphQLIcon, "GraphQL")
-	newHCollection    = modals.NewCreateItem(domain.KindCollection, widgets.CollectionIcon, "Collection")
+	newGRPCRequest    = modals.NewCreateItem(string(domain.RequestTypeGRPC), widgets.GRPCIcon, "GRPC")
+	newHTTPRequest    = modals.NewCreateItem(string(domain.RequestTypeHTTP), widgets.HTTPIcon, "HTTP")
+	newGraphQLRequest = modals.NewCreateItem(string(domain.RequestTypeGraphQL), widgets.GraphQLIcon, "GraphQL")
+	newHCollection    = modals.NewCreateItem(string(domain.KindCollection), widgets.CollectionIcon, "Collection")
 )
 
 const (
@@ -61,7 +61,7 @@ type View struct {
 
 	// callbacks
 	onTitleChanged                 func(id, title, containerType string)
-	onNewRequest                   func(requestType string)
+	onNewRequest                   func(requestType domain.RequestType)
 	onImport                       func(importType string)
 	onNewCollection                func()
 	onTabClose                     func(id string)
@@ -336,7 +336,7 @@ func (v *View) AddFileToFormData(requestId, fieldId, filePath string) {
 	}
 }
 
-func (v *View) SetOnNewRequest(onNewRequest func(requestType string)) {
+func (v *View) SetOnNewRequest(onNewRequest func(requestType domain.RequestType)) {
 	v.onNewRequest = onNewRequest
 }
 
@@ -1048,8 +1048,8 @@ func setNodePrefix(req *domain.Request, node *widgets.TreeNode) {
 			node.PrefixColor = chapartheme.GetRequestPrefixColor(req.Spec.HTTP.Method)
 		}
 	default:
-		node.Prefix = req.MetaData.Type
-		node.PrefixColor = chapartheme.GetRequestPrefixColor(req.MetaData.Type)
+		node.Prefix = string(req.MetaData.Type)
+		node.PrefixColor = chapartheme.GetRequestPrefixColor(string(req.MetaData.Type))
 	}
 }
 
@@ -1117,7 +1117,7 @@ func (v *View) showCreateNewModal() {
 		for _, item := range items {
 			if item.Clickable.Clicked(gtx) {
 				v.Base.CloseModal()
-				v.createNew(item.Key)
+				v.createNew(domain.RequestType(item.Key))
 			}
 		}
 
@@ -1145,7 +1145,7 @@ func (v *View) showImportModal() {
 	})
 }
 
-func (v *View) createNew(itemType string) {
+func (v *View) createNew(itemType domain.RequestType) {
 	if v.onNewRequest == nil || v.onNewCollection == nil {
 		return
 	}
