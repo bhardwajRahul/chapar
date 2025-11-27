@@ -1,8 +1,6 @@
 package component
 
 import (
-	"strings"
-
 	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/unit"
@@ -35,8 +33,6 @@ func NewHeaders(headers []domain.KeyValue) *Headers {
 
 func (h *Headers) SetHeaders(headers []domain.KeyValue) {
 	h.values.SetItems(converter.WidgetItemsFromKeyValue(headers))
-	// Update inherited headers when local headers change (to re-check for overrides)
-	h.updateInheritedHeaders()
 }
 
 func (h *Headers) SetOnChange(f func(values []domain.KeyValue)) {
@@ -50,32 +46,7 @@ func (h *Headers) SetOnChange(f func(values []domain.KeyValue)) {
 // SetCollectionHeaders sets the headers from the collection for inheritance
 func (h *Headers) SetCollectionHeaders(headers []domain.KeyValue) {
 	h.collectionHeaders = headers
-	// Update inherited values widget with headers that don't have local overrides
-	h.updateInheritedHeaders()
-}
-
-// updateInheritedHeaders updates the inherited headers widget, filtering out headers that have local overrides
-func (h *Headers) updateInheritedHeaders() {
-	// Filter out inherited headers that have local overrides
-	inheritedHeaders := make([]domain.KeyValue, 0)
-	for _, header := range h.collectionHeaders {
-		if !h.hasLocalHeaderWithKey(header.Key) {
-			inheritedHeaders = append(inheritedHeaders, header)
-		}
-	}
-
-	// Update the inherited values widget
-	h.inheritedValues.SetItems(converter.WidgetItemsFromKeyValue(inheritedHeaders))
-}
-
-// hasLocalHeaderWithKey checks if a local header exists with the given key
-func (h *Headers) hasLocalHeaderWithKey(key string) bool {
-	for _, item := range h.values.Items {
-		if strings.EqualFold(item.Key, key) {
-			return true
-		}
-	}
-	return false
+	h.inheritedValues.SetItems(converter.WidgetItemsFromKeyValue(headers))
 }
 
 func (h *Headers) Layout(gtx layout.Context, theme *chapartheme.Theme) layout.Dimensions {
@@ -91,7 +62,7 @@ func (h *Headers) Layout(gtx layout.Context, theme *chapartheme.Theme) layout.Di
 			}),
 			// Inherited headers section
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if len(h.collectionHeaders) == 0 || len(h.inheritedValues.Items) == 0 {
+				if len(h.collectionHeaders) == 0 {
 					return layout.Dimensions{}
 				}
 
