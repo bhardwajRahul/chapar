@@ -275,7 +275,6 @@ func (s *Service) executeScript(script string, request *domain.Request, resp *Re
 		},
 	}
 
-	fmt.Println("params", params)
 	result, err := s.scriptExecutor.Execute(context.Background(), script, params)
 	if err != nil {
 		return err

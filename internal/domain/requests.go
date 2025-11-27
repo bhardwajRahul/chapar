@@ -134,19 +134,23 @@ func DoablePreRequest(preReq PreRequest) bool {
 		return false
 	}
 
-	if preReq.TriggerRequest != nil && preReq.TriggerRequest.RequestID != "none" {
+	if preReq.Type == PrePostTypeTriggerRequest && preReq.TriggerRequest != nil && preReq.TriggerRequest.RequestID != "none" {
 		return true
 	}
 
-	if preReq.SShTunnel != nil && !preReq.SShTunnel.IsValid() {
-		return false
+	if preReq.Type == PrePostTypeSSHTunnel && preReq.SShTunnel != nil && preReq.SShTunnel.IsValid() {
+		return true
 	}
 
-	if preReq.KubernetesTunnel != nil && !preReq.KubernetesTunnel.IsValid() {
-		return false
+	if preReq.Type == PrePostTypeK8sTunnel && preReq.KubernetesTunnel != nil && preReq.KubernetesTunnel.IsValid() {
+		return true
 	}
 
-	return true
+	if preReq.Type == PrePostTypePython && preReq.Script != "" {
+		return true
+	}
+
+	return false
 }
 
 func DoablePostRequest(postReq PostRequest) bool {
@@ -154,7 +158,15 @@ func DoablePostRequest(postReq PostRequest) bool {
 		return false
 	}
 
-	return postReq.IsValid()
+	if postReq.Type == PrePostTypeSetEnv && postReq.PostRequestSet.IsValid() {
+		return true
+	}
+
+	if postReq.Type == PrePostTypePython && postReq.Script != "" {
+		return true
+	}
+
+	return false
 }
 
 func (r *RequestSpec) GetPostRequest() PostRequest {
@@ -394,7 +406,19 @@ func (tr *TriggerRequest) IsValid() bool {
 }
 
 func (pr *PostRequest) IsValid() bool {
-	return pr.Type != "" && pr.Script != "" && pr.PostRequestSet.IsValid()
+	if pr == nil {
+		return false
+	}
+
+	if pr.Type == PrePostTypeSetEnv && pr.PostRequestSet.IsValid() {
+		return true
+	}
+
+	if pr.Type == PrePostTypePython && pr.Script != "" {
+		return true
+	}
+
+	return false
 }
 
 func (ps *PostRequestSet) IsValid() bool {
