@@ -11,6 +11,7 @@ import (
 	"github.com/chapar-rest/chapar/internal/prefs"
 	"github.com/chapar-rest/chapar/ui/chapartheme"
 	"github.com/chapar-rest/chapar/ui/widgets"
+	"github.com/chapar-rest/chapar/version"
 )
 
 type Footer struct {
@@ -18,15 +19,12 @@ type Footer struct {
 	ConsoleClickable       widget.Clickable
 	RequestSplitClickable  widget.Clickable
 
-	AppVersion string
-
 	currentSplit layout.Axis
 	splitChanged bool
 }
 
-func New(appVersion string) *Footer {
+func New() *Footer {
 	f := &Footer{
-		AppVersion:             appVersion,
 		NotificationsClickable: widget.Clickable{},
 		ConsoleClickable:       widget.Clickable{},
 		RequestSplitClickable:  widget.Clickable{},
@@ -58,7 +56,7 @@ func (f *Footer) SetSplit(horizontalSplit bool) {
 
 func (f *Footer) leftLayout(gtx layout.Context, theme *chapartheme.Theme) layout.Dimensions {
 	return layout.Inset{Left: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return material.Label(theme.Material(), unit.Sp(12), f.AppVersion).Layout(gtx)
+		return material.Label(theme.Material(), unit.Sp(12), version.GetAppVersion()).Layout(gtx)
 	})
 }
 
@@ -100,7 +98,7 @@ func (f *Footer) rightLayout(gtx layout.Context, theme *chapartheme.Theme) layou
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(5)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			btn := widgets.Button(theme.Material(), &f.ConsoleClickable, widgets.ConsoleIcon, widgets.IconPositionStart, "Console")
+			btn := widgets.Button(theme.Material(), &f.ConsoleClickable, widgets.TerminalIcon, widgets.IconPositionStart, "Console")
 			btn.Background = theme.Palette.Bg
 			btn.TextSize = unit.Sp(12)
 			btn.IconSize = unit.Sp(12)

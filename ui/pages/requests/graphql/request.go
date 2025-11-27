@@ -1,4 +1,4 @@
-package restful
+package graphql
 
 import (
 	"gioui.org/layout"
@@ -9,6 +9,7 @@ import (
 	"github.com/chapar-rest/chapar/ui/explorer"
 	"github.com/chapar-rest/chapar/ui/pages/requests/component"
 	"github.com/chapar-rest/chapar/ui/widgets"
+	"github.com/chapar-rest/chapar/ui/widgets/codeeditor"
 )
 
 type Request struct {
@@ -17,11 +18,11 @@ type Request struct {
 	PreRequest  *component.PrePostRequest
 	PostRequest *component.PrePostRequest
 
-	Body      *Body
-	Params    *Params
-	Headers   *component.Headers
-	Variables *component.Variables
-	Auth      *component.Auth
+	Query         *codeeditor.CodeEditor
+	Variables     *codeeditor.CodeEditor
+	Headers       *component.Headers
+	VariablesList *component.Variables
+	Auth          *component.Auth
 
 	currentTab  string
 	OnTabChange func(title string)
@@ -36,11 +37,10 @@ func NewRequest(req *domain.Request, explorer *explorer.Explorer, theme *chapart
 
 	r := &Request{
 		Tabs: widgets.NewTabs([]*widgets.Tab{
-			{Title: "Params"},
-			{Title: "Body"},
-			{Title: "Auth"},
-			{Title: "Headers"},
+			{Title: "Query"},
 			{Title: "Variables"},
+			{Title: "Headers"},
+			{Title: "Auth"},
 			{Title: "Pre Request"},
 			{Title: "Post Request"},
 		}, nil),
@@ -48,45 +48,48 @@ func NewRequest(req *domain.Request, explorer *explorer.Explorer, theme *chapart
 			{Title: "None", Value: domain.PrePostTypeNone},
 			{Title: "Trigger request", Value: domain.PrePostTypeTriggerRequest, Type: component.TypeTriggerRequest, Hint: "Trigger another request"},
 			{Title: "Python", Value: domain.PrePostTypePython, Type: component.TypeScript, Hint: "Write your pre request python script here"},
-			//	{Title: "Shell Script", Value: domain.PostRequestTypeSSHTunnel, Type: component.TypeScript, Hint: "Write your pre request shell script here"},
-			//	{Title: "Kubectl tunnel", Value: domain.PostRequestTypeK8sTunnel, Type: component.TypeScript, Hint: "Run kubectl port-forward command"},
-			//	{Title: "SSH tunnel", Value: domain.PostRequestTypeSSHTunnel, Type: component.TypeScript, Hint: "Run ssh command"},
 		}, nil, theme),
 		PostRequest: component.NewPrePostRequest([]component.Option{
 			{Title: "None", Value: domain.PrePostTypeNone},
 			{Title: "Set Environment Variable", Value: domain.PrePostTypeSetEnv, Type: component.TypeSetEnv, Hint: "Set environment variable"},
 			{Title: "Python", Value: domain.PrePostTypePython, Type: component.TypeScript, Hint: "Write your post request python script here"},
-			//	{Title: "Shell Script", Value: domain.PostRequestTypeShellScript, Type: component.TypeScript, Hint: "Write your post request shell script here"},
 		}, postRequestDropDown, theme),
-
-		Body:      NewBody(req.Spec.HTTP.Request.Body, theme, explorer),
-		Params:    NewParams(nil, nil),
-		Headers:   component.NewHeaders(nil),
-		Auth:      component.NewAuth(req.Spec.HTTP.Request.Auth, theme),
-		Variables: component.NewVariables(theme, domain.RequestTypeHTTP),
+		Query:         codeeditor.NewCodeEditor("", codeeditor.CodeLanguageGraphQL, theme),
+		Variables:     codeeditor.NewCodeEditor("{}", codeeditor.CodeLanguageJSON, theme),
+		Headers:       component.NewHeaders(nil),
+		VariablesList: component.NewVariables(theme, domain.RequestTypeGraphQL),
+		Auth:          component.NewAuth(domain.Auth{}, theme),
 	}
 
-	if req.Spec != (domain.RequestSpec{}) && req.Spec.HTTP != nil && req.Spec.HTTP.Request != nil {
-		r.Params.SetQueryParams(req.Spec.HTTP.Request.QueryParams)
-		r.Params.SetPathParams(req.Spec.HTTP.Request.PathParams)
-		r.Headers.SetHeaders(req.Spec.HTTP.Request.Headers)
+	r.Variables.WithBeautifier(true)
 
-		if req.Spec.HTTP.Request.PreRequest != (domain.PreRequest{}) {
-			r.PreRequest.SetSelectedDropDown(req.Spec.HTTP.Request.PreRequest.Type)
-			r.PreRequest.SetCode(req.Spec.HTTP.Request.PreRequest.Script)
+	if req.Spec != (domain.RequestSpec{}) && req.Spec.GraphQL != nil {
+		r.Query.SetCode(req.Spec.GraphQL.Query)
+		r.Variables.SetCode(req.Spec.GraphQL.Variables)
+		if len(req.Spec.GraphQL.Headers) > 0 {
+			r.Headers.SetHeaders(req.Spec.GraphQL.Headers)
 		}
 
-		if req.Spec.HTTP.Request.PostRequest != (domain.PostRequest{}) {
-			r.PostRequest.SetSelectedDropDown(req.Spec.HTTP.Request.PostRequest.Type)
-			r.PostRequest.SetCode(req.Spec.HTTP.Request.PostRequest.Script)
+		if req.Spec.GraphQL.Auth != (domain.Auth{}) {
+			r.Auth = component.NewAuth(req.Spec.GraphQL.Auth, theme)
 		}
 
-		if req.Spec.HTTP.Request.PostRequest.PostRequestSet != (domain.PostRequestSet{}) {
-			r.PostRequest.SetPostRequestSetValues(req.Spec.HTTP.Request.PostRequest.PostRequestSet)
+		if req.Spec.GraphQL.PreRequest != (domain.PreRequest{}) {
+			r.PreRequest.SetSelectedDropDown(req.Spec.GraphQL.PreRequest.Type)
+			r.PreRequest.SetCode(req.Spec.GraphQL.PreRequest.Script)
 		}
 
-		if req.Spec.HTTP.Request.Variables != nil {
-			r.Variables.SetValues(req.Spec.HTTP.Request.Variables)
+		if req.Spec.GraphQL.PostRequest != (domain.PostRequest{}) {
+			r.PostRequest.SetSelectedDropDown(req.Spec.GraphQL.PostRequest.Type)
+			r.PostRequest.SetCode(req.Spec.GraphQL.PostRequest.Script)
+		}
+
+		if req.Spec.GraphQL.PostRequest.PostRequestSet != (domain.PostRequestSet{}) {
+			r.PostRequest.SetPostRequestSetValues(req.Spec.GraphQL.PostRequest.PostRequestSet)
+		}
+
+		if req.Spec.GraphQL.VariablesList != nil {
+			r.VariablesList.SetValues(req.Spec.GraphQL.VariablesList)
 		}
 	}
 
@@ -116,16 +119,20 @@ func (r *Request) Layout(gtx layout.Context, theme *chapartheme.Theme) layout.Di
 					return r.PreRequest.Layout(gtx, theme)
 				case "Post Request":
 					return r.PostRequest.Layout(gtx, theme)
-				case "Params":
-					return r.Params.Layout(gtx, theme)
+				case "Query":
+					return layout.Inset{Top: unit.Dp(5), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return r.Query.Layout(gtx, theme, "GraphQL Query")
+					})
+				case "Variables":
+					return layout.Inset{Top: unit.Dp(5), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return r.Variables.Layout(gtx, theme, "Variables (JSON)")
+					})
 				case "Headers":
-					return r.Headers.Layout(gtx, theme)
+					return layout.Inset{Top: unit.Dp(5), Right: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return r.Headers.Layout(gtx, theme)
+					})
 				case "Auth":
 					return r.Auth.Layout(gtx, theme)
-				case "Variables":
-					return r.Variables.Layout(gtx, "Variables", "", theme)
-				case "Body":
-					return r.Body.Layout(gtx, theme)
 				default:
 					return layout.Dimensions{}
 				}

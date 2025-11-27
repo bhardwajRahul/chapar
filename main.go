@@ -23,7 +23,6 @@ import (
 )
 
 var (
-	appVersion  = ""
 	enablePprof = flag.Bool("pprof", false, "enable pprof")
 )
 
@@ -40,7 +39,7 @@ func main() {
 		var w app.Window
 		w.Option(app.Title("Chapar"), app.Size(unit.Dp(1200), unit.Dp(800)))
 
-		chaparApp, err := internal_app.NewApp(&w, appVersion)
+		chaparApp, err := internal_app.NewApp(&w)
 		if err != nil {
 			if err := showStartupError(&w, err); err != nil {
 				log.Fatal(err)

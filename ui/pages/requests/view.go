@@ -8,11 +8,11 @@ import (
 	giox "gioui.org/x/component"
 	"github.com/google/uuid"
 
-	"github.com/chapar-rest/chapar/assets"
 	"github.com/chapar-rest/chapar/ui"
 	"github.com/chapar-rest/chapar/ui/explorer"
 	"github.com/chapar-rest/chapar/ui/modals"
 	"github.com/chapar-rest/chapar/ui/navigator"
+	"github.com/chapar-rest/chapar/ui/pages/requests/graphql"
 	"github.com/chapar-rest/chapar/ui/pages/requests/grpc"
 
 	"github.com/chapar-rest/chapar/internal/domain"
@@ -28,17 +28,19 @@ import (
 var (
 	_ navigator.View = &View{}
 
-	newGRPCRequest = modals.NewCreateItem(domain.RequestTypeGRPC, assets.GRPCImage, "GRPC Request")
-	newHTTPRequest = modals.NewCreateItem(domain.RequestTypeHTTP, assets.HTTPImage, "HTTP Request")
-	newHCollection = modals.NewCreateItem(domain.KindCollection, assets.CollectionImage, "Collection")
+	newGRPCRequest    = modals.NewCreateItem(string(domain.RequestTypeGRPC), widgets.GRPCIcon, "GRPC")
+	newHTTPRequest    = modals.NewCreateItem(string(domain.RequestTypeHTTP), widgets.HTTPIcon, "HTTP")
+	newGraphQLRequest = modals.NewCreateItem(string(domain.RequestTypeGraphQL), widgets.GraphQLIcon, "GraphQL")
+	newHCollection    = modals.NewCreateItem(string(domain.KindCollection), widgets.CollectionIcon, "Collection")
 )
 
 const (
-	MenuDuplicate      = "Duplicate"
-	MenuDelete         = "Delete"
-	MenuAddHTTPRequest = "Add HTTP Request"
-	MenuAddGRPCRequest = "Add GRPC Request"
-	MenuView           = "View"
+	MenuDuplicate         = "Duplicate"
+	MenuDelete            = "Delete"
+	MenuAddHTTPRequest    = "Add HTTP Request"
+	MenuAddGRPCRequest    = "Add GRPC Request"
+	MenuAddGraphQLRequest = "Add GraphQL Request"
+	MenuView              = "View"
 )
 
 type View struct {
@@ -59,7 +61,7 @@ type View struct {
 
 	// callbacks
 	onTitleChanged                 func(id, title, containerType string)
-	onNewRequest                   func(requestType string)
+	onNewRequest                   func(requestType domain.RequestType)
 	onImport                       func(importType string)
 	onNewCollection                func()
 	onTabClose                     func(id string)
@@ -151,6 +153,11 @@ func (v *View) SetPreRequestCollections(id string, collections []*domain.Collect
 
 		if ct, ok := ct.(GrpcContainer); ok {
 			ct.SetPreRequestCollections(collections, selectedID)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
+			ct.SetPreRequestCollections(collections, selectedID)
 		}
 	}
 }
@@ -163,6 +170,11 @@ func (v *View) SetPreRequestRequests(id string, requests []*domain.Request, sele
 		}
 
 		if ct, ok := ct.(GrpcContainer); ok {
+			ct.SetPreRequestRequests(requests, selectedID)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
 			ct.SetPreRequestRequests(requests, selectedID)
 		}
 	}
@@ -195,6 +207,11 @@ func (v *View) SetPostRequestSetValues(id string, set domain.PostRequestSet) {
 
 		if ct, ok := ct.(GrpcContainer); ok {
 			ct.SetPostRequestSetValues(set)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
+			ct.SetPostRequestSetValues(set)
 		}
 	}
 }
@@ -207,6 +224,11 @@ func (v *View) SetPostRequestSetPreview(id, preview string) {
 		}
 
 		if ct, ok := ct.(GrpcContainer); ok {
+			ct.SetPostRequestSetPreview(preview)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
 			ct.SetPostRequestSetPreview(preview)
 		}
 	}
@@ -232,7 +254,7 @@ func (v *View) AddCollectionTreeViewNode(collection *domain.Collection) {
 		Text:        collection.MetaData.Name,
 		Identifier:  collection.MetaData.ID,
 		Children:    make([]*widgets.TreeNode, 0),
-		MenuOptions: []string{MenuAddHTTPRequest, MenuAddGRPCRequest, MenuDuplicate, MenuView, MenuDelete},
+		MenuOptions: []string{MenuAddHTTPRequest, MenuAddGRPCRequest, MenuAddGraphQLRequest, MenuDuplicate, MenuView, MenuDelete},
 		Meta:        safemap.New[string](),
 	}
 
@@ -314,7 +336,7 @@ func (v *View) AddFileToFormData(requestId, fieldId, filePath string) {
 	}
 }
 
-func (v *View) SetOnNewRequest(onNewRequest func(requestType string)) {
+func (v *View) SetOnNewRequest(onNewRequest func(requestType domain.RequestType)) {
 	v.onNewRequest = onNewRequest
 }
 
@@ -483,6 +505,11 @@ func (v *View) OpenRequestContainer(req *domain.Request) {
 		v.containers.Set(req.MetaData.ID, ct)
 	}
 
+	if req.MetaData.Type == domain.RequestTypeGraphQL {
+		ct := v.createGraphQLContainer(req)
+		v.containers.Set(req.MetaData.ID, ct)
+	}
+
 	v.window.Invalidate()
 }
 
@@ -618,9 +645,68 @@ func (v *View) createRestfulContainer(req *domain.Request) Container {
 	return ct
 }
 
+func (v *View) createGraphQLContainer(req *domain.Request) Container {
+	ct := graphql.New(req, v.theme, v.explorer)
+
+	ct.SetOnTitleChanged(func(text string) {
+		if v.onTitleChanged != nil {
+			v.onTitleChanged(req.MetaData.ID, text, TypeRequest)
+		}
+	})
+
+	ct.SetOnSave(func(id string) {
+		if v.onSave != nil {
+			v.onSave(id)
+		}
+	})
+
+	ct.SetOnDataChanged(func(id string, data any) {
+		if v.onDataChanged != nil {
+			v.onDataChanged(id, data, TypeRequest)
+		}
+	})
+
+	ct.SetOnSubmit(func(id string) {
+		if v.onSubmit != nil {
+			v.onSubmit(id, TypeRequest)
+		}
+	})
+
+	ct.SetOnCopyResponse(func(gtx layout.Context, dataType, data string) {
+		if v.onCopyResponse != nil {
+			v.onCopyResponse(gtx, dataType, data)
+		}
+	})
+
+	ct.SetOnPostRequestSetChanged(func(id string, statusCode int, item, from, fromKey string) {
+		if v.onOnPostRequestSetChanged != nil {
+			v.onOnPostRequestSetChanged(id, statusCode, item, from, fromKey)
+		}
+	})
+
+	ct.SetOnSetOnTriggerRequestChanged(func(id, collectionID, requestID string) {
+		if v.onOnSetOnTriggerRequestChanged != nil {
+			v.onOnSetOnTriggerRequestChanged(id, collectionID, requestID)
+		}
+	})
+
+	ct.SetOnRequestTabChange(func(id, tab string) {
+		if v.onRequestTabChanged != nil {
+			v.onRequestTabChanged(id, tab)
+		}
+	})
+
+	return ct
+}
+
 func (v *View) SetRequestCollection(id string, collection *domain.Collection) {
 	if ct, ok := v.containers.Get(id); ok {
 		if ct, ok := ct.(RestContainer); ok {
+			ct.SetCollection(collection)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
 			ct.SetCollection(collection)
 		}
 		// TODO: Add support for gRPC containers if needed
@@ -674,6 +760,11 @@ func (v *View) SetSendingRequestLoading(id string) {
 
 		if ct, ok := ct.(GrpcContainer); ok {
 			ct.SetResponseLoading(true)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
+			ct.ShowSendingRequestLoading()
 		}
 	}
 }
@@ -687,6 +778,11 @@ func (v *View) SetSendingRequestLoaded(id string) {
 
 		if ct, ok := ct.(GrpcContainer); ok {
 			ct.SetResponseLoading(false)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
+			ct.HideSendingRequestLoading()
 		}
 	}
 }
@@ -710,6 +806,11 @@ func (v *View) SetPathParams(id string, params []domain.KeyValue) {
 func (v *View) SetURL(id, url string) {
 	if ct, ok := v.containers.Get(id); ok {
 		if ct, ok := ct.(RestContainer); ok {
+			ct.SetURL(url)
+			return
+		}
+
+		if ct, ok := ct.(GraphQLContainer); ok {
 			ct.SetURL(url)
 		}
 	}
@@ -760,6 +861,15 @@ func (v *View) SetGRPCResponse(id string, response domain.GRPCResponseDetail) {
 	}
 }
 
+func (v *View) SetGraphQLResponse(id string, response domain.GraphQLResponseDetail) {
+	if ct, ok := v.containers.Get(id); ok {
+		if ct, ok := ct.(GraphQLContainer); ok {
+			ct.SetGraphQLResponse(response)
+			v.window.Invalidate()
+		}
+	}
+}
+
 func (v *View) GetHTTPResponse(id string) *domain.HTTPResponseDetail {
 	if ct, ok := v.containers.Get(id); ok {
 		if ct, ok := ct.(RestContainer); ok {
@@ -774,6 +884,16 @@ func (v *View) GetGRPCResponse(id string) *domain.GRPCResponseDetail {
 	if ct, ok := v.containers.Get(id); ok {
 		if ct, ok := ct.(GrpcContainer); ok {
 			return ct.GetResponse()
+		}
+	}
+
+	return nil
+}
+
+func (v *View) GetGraphQLResponse(id string) *domain.GraphQLResponseDetail {
+	if ct, ok := v.containers.Get(id); ok {
+		if ct, ok := ct.(GraphQLContainer); ok {
+			return ct.GetGraphQLResponse()
 		}
 	}
 
@@ -833,7 +953,7 @@ func (v *View) PopulateTreeView(requests []*domain.Request, collections []*domai
 			Text:        cl.MetaData.Name,
 			Identifier:  cl.MetaData.ID,
 			Children:    make([]*widgets.TreeNode, 0),
-			MenuOptions: []string{MenuAddHTTPRequest, MenuAddGRPCRequest, MenuDuplicate, MenuView, MenuDelete},
+			MenuOptions: []string{MenuAddHTTPRequest, MenuAddGRPCRequest, MenuAddGraphQLRequest, MenuDuplicate, MenuView, MenuDelete},
 			Meta:        safemap.New[string](),
 		}
 		parentNode.Meta.Set(TypeMeta, TypeCollection)
@@ -914,12 +1034,22 @@ func (v *View) addTreeViewNode(parentID string, req *domain.Request) {
 }
 
 func setNodePrefix(req *domain.Request, node *widgets.TreeNode) {
-	if req.MetaData.Type == domain.RequestTypeGRPC {
+
+	switch req.MetaData.Type {
+	case domain.RequestTypeGRPC:
 		node.Prefix = "gRPC"
 		node.PrefixColor = chapartheme.GetRequestPrefixColor("gRPC")
-	} else {
-		node.Prefix = req.Spec.HTTP.Method
-		node.PrefixColor = chapartheme.GetRequestPrefixColor(req.Spec.HTTP.Method)
+	case domain.RequestTypeGraphQL:
+		node.Prefix = "GraphQL"
+		node.PrefixColor = chapartheme.GetRequestPrefixColor("GraphQL")
+	case domain.RequestTypeHTTP:
+		if req.Spec.HTTP != nil {
+			node.Prefix = req.Spec.HTTP.Method
+			node.PrefixColor = chapartheme.GetRequestPrefixColor(req.Spec.HTTP.Method)
+		}
+	default:
+		node.Prefix = string(req.MetaData.Type)
+		node.PrefixColor = chapartheme.GetRequestPrefixColor(string(req.MetaData.Type))
 	}
 }
 
@@ -976,7 +1106,7 @@ func (v *View) requestList(gtx layout.Context, theme *chapartheme.Theme) layout.
 }
 
 func (v *View) showCreateNewModal() {
-	items := []*modals.CreateItem{newGRPCRequest, newHTTPRequest, newHCollection}
+	items := []*modals.CreateItem{newGRPCRequest, newHTTPRequest, newGraphQLRequest, newHCollection}
 
 	m := modals.NewCreateModal(items)
 	v.SetModal(func(gtx layout.Context) layout.Dimensions {
@@ -987,7 +1117,7 @@ func (v *View) showCreateNewModal() {
 		for _, item := range items {
 			if item.Clickable.Clicked(gtx) {
 				v.Base.CloseModal()
-				v.createNew(item.Key)
+				v.createNew(domain.RequestType(item.Key))
 			}
 		}
 
@@ -1015,7 +1145,7 @@ func (v *View) showImportModal() {
 	})
 }
 
-func (v *View) createNew(itemType string) {
+func (v *View) createNew(itemType domain.RequestType) {
 	if v.onNewRequest == nil || v.onNewCollection == nil {
 		return
 	}
@@ -1025,6 +1155,8 @@ func (v *View) createNew(itemType string) {
 		v.onNewRequest(domain.RequestTypeGRPC)
 	case domain.RequestTypeHTTP:
 		v.onNewRequest(domain.RequestTypeHTTP)
+	case domain.RequestTypeGraphQL:
+		v.onNewRequest(domain.RequestTypeGraphQL)
 	case domain.KindCollection:
 		v.onNewCollection()
 	}

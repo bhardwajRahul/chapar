@@ -3,37 +3,64 @@ package egress
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/chapar-rest/chapar/internal/domain"
-	"github.com/chapar-rest/chapar/internal/grpc"
 	"github.com/chapar-rest/chapar/internal/jsonpath"
 	"github.com/chapar-rest/chapar/internal/logger"
 	"github.com/chapar-rest/chapar/internal/prefs"
-	"github.com/chapar-rest/chapar/internal/rest"
 	"github.com/chapar-rest/chapar/internal/scripting"
 	"github.com/chapar-rest/chapar/internal/state"
 	"github.com/chapar-rest/chapar/ui/notifications"
+	"golang.org/x/sync/errgroup"
 )
+
+type Response struct {
+	// http and graphql
+	StatusCode      int
+	ResponseHeaders map[string]string
+	RequestHeaders  map[string]string
+	Cookies         []*http.Cookie
+
+	// grpc
+	RequestMetadata  []domain.KeyValue
+	ResponseMetadata []domain.KeyValue
+	Trailers         []domain.KeyValue
+	Size             int
+	Error            error
+
+	StatueCode int
+	Status     string
+
+	Body       []byte
+	TimePassed time.Duration
+	IsJSON     bool
+	JSON       string
+}
+
+type Sender interface {
+	SendRequest(requestID, activeEnvironmentID string) (*Response, error)
+}
 
 type Service struct {
 	requests     *state.Requests
 	environments *state.Environments
 
-	rest *rest.Service
-	grpc *grpc.Service
+	senders map[domain.RequestType]Sender
 
 	scriptExecutor scripting.Executor
 }
 
-func New(requests *state.Requests, environments *state.Environments, rest *rest.Service, grpc *grpc.Service, scriptExecutor scripting.Executor) *Service {
+func New(requests *state.Requests, environments *state.Environments, rest, grpc, graphql Sender, scriptExecutor scripting.Executor) *Service {
 	return &Service{
-		requests:       requests,
-		environments:   environments,
-		rest:           rest,
-		grpc:           grpc,
+		requests:     requests,
+		environments: environments,
+		senders: map[domain.RequestType]Sender{
+			domain.RequestTypeHTTP:    rest,
+			domain.RequestTypeGRPC:    grpc,
+			domain.RequestTypeGraphQL: graphql,
+		},
 		scriptExecutor: scriptExecutor,
 	}
 }
@@ -52,12 +79,17 @@ func (s *Service) Send(id, activeEnvironmentID string) (any, error) {
 		return nil, err
 	}
 
-	var res any
+	var res *Response
 	var err error
-	if req.MetaData.Type == domain.RequestTypeHTTP {
-		res, err = s.rest.SendRequest(req.MetaData.ID, activeEnvironmentID)
-	} else {
-		res, err = s.grpc.Invoke(req.MetaData.ID, activeEnvironmentID)
+
+	sender, ok := s.senders[req.MetaData.Type]
+	if !ok {
+		return nil, fmt.Errorf("unknown request type: %s", req.MetaData.Type)
+	}
+
+	res, err = sender.SendRequest(req.MetaData.ID, activeEnvironmentID)
+	if err != nil {
+		return nil, err
 	}
 
 	var activeEnvironment *domain.Environment
@@ -77,19 +109,13 @@ func (s *Service) Send(id, activeEnvironmentID string) (any, error) {
 }
 
 func (s *Service) preRequest(req *domain.Request, activeEnvironmentID string) error {
-	var preReq domain.PreRequest
-	if req.MetaData.Type == domain.RequestTypeHTTP {
-		preReq = req.Spec.GetHTTP().GetPreRequest()
-	} else {
-		preReq = req.Spec.GetGRPC().GetPreRequest()
-	}
-
-	if preReq == (domain.PreRequest{}) || preReq.TriggerRequest == nil || preReq.TriggerRequest.RequestID == "none" {
+	preReq := req.Spec.GetPreRequest()
+	if !domain.DoablePreRequest(preReq) {
 		return nil
 	}
 
-	if preReq.Type != domain.PrePostTypeTriggerRequest {
-		// TODO: implement other types
+	// for now we only support trigger request
+	if preReq.TriggerRequest == nil {
 		return nil
 	}
 
@@ -97,36 +123,33 @@ func (s *Service) preRequest(req *domain.Request, activeEnvironmentID string) er
 	return err
 }
 
-func (s *Service) postRequest(req *domain.Request, res any, env *domain.Environment) error {
-	if req.MetaData.Type == domain.RequestTypeHTTP {
-		postReq := req.Spec.GetHTTP().GetPostRequest()
-		if response, ok := res.(*rest.Response); ok {
-			// handle variables
-			// TODO handling variables does not seem to be good fit here in post request
-			if err := s.handleHTTPVariables(req.Spec.GetHTTP().Request.Variables, response, env); err != nil {
-				return err
-			}
-
-			return s.handleHTTPPostRequest(postReq, req, response, env)
-		} else {
-			return fmt.Errorf("response is not of type *rest.Response")
-		}
+func (s *Service) postRequest(req *domain.Request, res *Response, env *domain.Environment) error {
+	postReq := req.Spec.GetPostRequest()
+	if !domain.DoablePostRequest(postReq) {
+		return nil
 	}
 
-	postReq := req.Spec.GetGRPC().GetPostRequest()
-	if response, ok := res.(*grpc.Response); ok {
-		if err := s.handleGRPcVariables(req.Spec.GetGRPC().Variables, response, env); err != nil {
+	// extract variables if any
+	if err := s.extactVariables(req.Spec.GetVariables(), res, env); err != nil {
+		return err
+	}
+
+	// if any script is provided, execute it
+	if postReq.Script != "" {
+		if err := s.executeScript(postReq.Script, req, res, env); err != nil {
 			return err
 		}
-
-		return s.handleGRPCPostRequest(postReq, response, env)
 	}
 
-	return fmt.Errorf("response is not of type *grpc.Response")
+	if err := s.handlePostRequestSetEnv(postReq, res, env); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (s *Service) handleHTTPVariables(variables []domain.Variable, response *rest.Response, env *domain.Environment) error {
-	if variables == nil || response == nil || env == nil {
+func (s *Service) extactVariables(settings []domain.Variable, response *Response, env *domain.Environment) error {
+	if settings == nil || response == nil || env == nil {
 		return nil
 	}
 
@@ -173,59 +196,12 @@ func (s *Service) handleHTTPVariables(variables []domain.Variable, response *res
 					}
 				}
 			}
-		}
-
-		return nil
-	}
-
-	errG := errgroup.Group{}
-	for _, v := range variables {
-		v := v
-		errG.Go(func() error {
-			return fn(v)
-		})
-	}
-
-	return errG.Wait()
-}
-
-func (s *Service) handleGRPcVariables(variables []domain.Variable, response *grpc.Response, env *domain.Environment) error {
-	if variables == nil || response == nil || env == nil {
-		return nil
-	}
-
-	fn := func(v domain.Variable) error {
-		if !v.Enable {
-			return nil
-		}
-
-		if v.OnStatusCode != response.StatueCode {
-			return nil
-		}
-
-		switch v.From {
-		case domain.VariableFromBody:
-			data, err := jsonpath.Get(response.Body, v.JsonPath)
-			if err != nil {
-				return err
-			}
-
-			if data == nil {
-				return nil
-			}
-
-			if result, ok := data.(string); ok {
-				env.SetKey(v.TargetEnvVariable, result)
-				if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
-					return err
-				}
-			}
 
 		case domain.VariableFromMetaData:
 			for _, item := range response.ResponseMetadata {
 				if item.Key == v.SourceKey {
 					env.SetKey(v.TargetEnvVariable, item.Value)
-					if err := s.environments.UpdateEnvironment(env, state.SourceGRPCService, false); err != nil {
+					if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
 						return err
 					}
 				}
@@ -234,7 +210,7 @@ func (s *Service) handleGRPcVariables(variables []domain.Variable, response *grp
 			for _, item := range response.Trailers {
 				if item.Key == v.SourceKey {
 					env.SetKey(v.TargetEnvVariable, item.Value)
-					if err := s.environments.UpdateEnvironment(env, state.SourceGRPCService, false); err != nil {
+					if err := s.environments.UpdateEnvironment(env, state.SourceRestService, false); err != nil {
 						return err
 					}
 				}
@@ -245,7 +221,7 @@ func (s *Service) handleGRPcVariables(variables []domain.Variable, response *grp
 	}
 
 	errG := errgroup.Group{}
-	for _, v := range variables {
+	for _, v := range settings {
 		v := v
 		errG.Go(func() error {
 			return fn(v)
@@ -255,48 +231,37 @@ func (s *Service) handleGRPcVariables(variables []domain.Variable, response *grp
 	return errG.Wait()
 }
 
-func (s *Service) handleHTTPPostRequest(r domain.PostRequest, request *domain.Request, response *rest.Response, env *domain.Environment) error {
-	if r == (domain.PostRequest{}) || response == nil {
-		return nil
-	}
-
-	// TODO: this is a temporary solution to fix crashes when scripting is disabled. it need to be improved
-	if r.Type == domain.PrePostTypePython && prefs.GetGlobalConfig().Spec.Scripting.Enabled {
-		return s.handlePostRequestScript(r.Script, request, response, env)
-	}
-
-	if r.Type != domain.PrePostTypeSetEnv {
-		// TODO: implement other types
-		return nil
-	}
-
-	if env == nil {
-		logger.Warn("No active environment, cannot handle post request set environment")
+func (s *Service) handlePostRequestSetEnv(postReq domain.PostRequest, res *Response, env *domain.Environment) error {
+	// handle set env if any
+	// TODO: we need to give feedback to the user that the post request is not valid
+	if postReq.Type != domain.PrePostTypeSetEnv || !postReq.PostRequestSet.IsValid() {
 		return nil
 	}
 
 	// only handle post request if the status code is the same as the one provided
-	if response.StatusCode != r.PostRequestSet.StatusCode {
+	if res.StatueCode != postReq.PostRequestSet.StatusCode {
 		return nil
 	}
 
-	switch r.PostRequestSet.From {
+	switch postReq.PostRequestSet.From {
 	case domain.PostRequestSetFromResponseBody:
-		return s.handlePostRequestFromBody(r, response, env)
+		return s.handlePostRequestFromBody(postReq, res, env)
 	case domain.PostRequestSetFromResponseHeader:
-		return s.handlePostRequestFromHeader(r, response, env)
+		return s.handlePostRequestFromHeader(postReq, res, env)
 	case domain.PostRequestSetFromResponseCookie:
-		return s.handlePostRequestFromCookie(r, response, env)
+		return s.handlePostRequestFromCookie(postReq, res, env)
+	case domain.PostRequestSetFromResponseMetaData:
+		return s.handlePostRequestFromMetaData(postReq, res, env)
+	case domain.PostRequestSetFromResponseTrailers:
+		return s.handlePostRequestFromTrailers(postReq, res, env)
 	}
-
 	return nil
 }
 
-func (s *Service) handlePostRequestScript(script string, request *domain.Request, resp *rest.Response, env *domain.Environment) error {
-	// if script executor is not set, return error
-	if s.scriptExecutor == nil {
-		logger.Warn("script executor is not enable or not ready yet, cannot handle post request script")
-		notifications.Send("Failed to run post request script, check console for logs", notifications.NotificationTypeError, time.Second*3)
+func (s *Service) executeScript(script string, request *domain.Request, resp *Response, env *domain.Environment) error {
+	if !prefs.GetGlobalConfig().Spec.Scripting.Enabled || s.scriptExecutor == nil {
+		logger.Warn("Scripting is disabled, cannot execute script")
+		notifications.Send("Scripting is disabled, cannot execute script", notifications.NotificationTypeError, time.Second*3)
 		return nil
 	}
 
@@ -341,7 +306,7 @@ func (s *Service) handlePostRequestScript(script string, request *domain.Request
 	return nil
 }
 
-func (s *Service) handlePostRequestFromBody(r domain.PostRequest, response *rest.Response, env *domain.Environment) error {
+func (s *Service) handlePostRequestFromBody(r domain.PostRequest, response *Response, env *domain.Environment) error {
 	// handle post request
 	if r.PostRequestSet.From != domain.PostRequestSetFromResponseBody {
 		return nil
@@ -371,7 +336,7 @@ func (s *Service) handlePostRequestFromBody(r domain.PostRequest, response *rest
 	return nil
 }
 
-func (s *Service) handlePostRequestFromHeader(r domain.PostRequest, response *rest.Response, env *domain.Environment) error {
+func (s *Service) handlePostRequestFromHeader(r domain.PostRequest, response *Response, env *domain.Environment) error {
 	if r.PostRequestSet.From != domain.PostRequestSetFromResponseHeader {
 		return nil
 	}
@@ -388,7 +353,7 @@ func (s *Service) handlePostRequestFromHeader(r domain.PostRequest, response *re
 	return nil
 }
 
-func (s *Service) handlePostRequestFromCookie(r domain.PostRequest, response *rest.Response, env *domain.Environment) error {
+func (s *Service) handlePostRequestFromCookie(r domain.PostRequest, response *Response, env *domain.Environment) error {
 	if r.PostRequestSet.From != domain.PostRequestSetFromResponseCookie {
 		return nil
 	}
@@ -404,64 +369,7 @@ func (s *Service) handlePostRequestFromCookie(r domain.PostRequest, response *re
 	return nil
 }
 
-func (s *Service) handleGRPCPostRequest(r domain.PostRequest, res *grpc.Response, env *domain.Environment) error {
-	if r == (domain.PostRequest{}) || res == nil || env == nil {
-		return nil
-	}
-
-	if r.Type != domain.PrePostTypeSetEnv {
-		return nil
-	}
-
-	// only handle post request if the status code is the same as the one provided
-	if res.StatueCode != r.PostRequestSet.StatusCode {
-		return nil
-	}
-
-	switch r.PostRequestSet.From {
-	case domain.PostRequestSetFromResponseBody:
-		return s.handleGRPCPostRequestFromBody(r, res, env)
-	case domain.PostRequestSetFromResponseMetaData:
-		return s.handlePostRequestFromMetaData(r, res, env)
-	case domain.PostRequestSetFromResponseTrailers:
-		return s.handlePostRequestFromTrailers(r, res, env)
-	}
-
-	return nil
-}
-
-func (s *Service) handleGRPCPostRequestFromBody(r domain.PostRequest, res *grpc.Response, env *domain.Environment) error {
-	if r.PostRequestSet.From != domain.PostRequestSetFromResponseBody {
-		return nil
-	}
-
-	if res.Body == "" {
-		return nil
-	}
-
-	data, err := jsonpath.Get(res.Body, r.PostRequestSet.FromKey)
-	if err != nil {
-		return err
-	}
-
-	if data == nil {
-		return nil
-	}
-
-	if result, ok := data.(string); ok {
-		if env != nil {
-			env.SetKey(r.PostRequestSet.Target, result)
-
-			if err := s.environments.UpdateEnvironment(env, state.SourceGRPCService, false); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (s *Service) handlePostRequestFromMetaData(r domain.PostRequest, res *grpc.Response, env *domain.Environment) error {
+func (s *Service) handlePostRequestFromMetaData(r domain.PostRequest, res *Response, env *domain.Environment) error {
 	if r.PostRequestSet.From != domain.PostRequestSetFromResponseMetaData {
 		return nil
 	}
@@ -478,7 +386,7 @@ func (s *Service) handlePostRequestFromMetaData(r domain.PostRequest, res *grpc.
 	return nil
 }
 
-func (s *Service) handlePostRequestFromTrailers(r domain.PostRequest, res *grpc.Response, env *domain.Environment) error {
+func (s *Service) handlePostRequestFromTrailers(r domain.PostRequest, res *Response, env *domain.Environment) error {
 	if r.PostRequestSet.From != domain.PostRequestSetFromResponseTrailers {
 		return nil
 	}

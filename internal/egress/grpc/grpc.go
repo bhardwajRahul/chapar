@@ -26,9 +26,12 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/chapar-rest/chapar/internal/domain"
+	"github.com/chapar-rest/chapar/internal/egress"
 	"github.com/chapar-rest/chapar/internal/safemap"
 	"github.com/chapar-rest/chapar/internal/state"
+	"github.com/chapar-rest/chapar/internal/util"
 	"github.com/chapar-rest/chapar/internal/variables"
+	"github.com/chapar-rest/chapar/version"
 )
 
 var (
@@ -36,8 +39,6 @@ var (
 )
 
 type Service struct {
-	appVersion string
-
 	requests     *state.Requests
 	environments *state.Environments
 	protoFiles   *state.ProtoFiles
@@ -45,26 +46,8 @@ type Service struct {
 	protoFilesRegistry *safemap.Map[*protoregistry.Files]
 }
 
-type Response struct {
-	Body             string
-	RequestMetadata  []domain.KeyValue
-	ResponseMetadata []domain.KeyValue
-	Trailers         []domain.KeyValue
-	TimePassed       time.Duration
-	Size             int
-	Error            error
-
-	StatueCode int
-	Status     string
-}
-
-var (
-	appName = "Chapar"
-)
-
-func NewService(appVersion string, requests *state.Requests, envs *state.Environments, protoFiles *state.ProtoFiles) *Service {
+func NewService(requests *state.Requests, envs *state.Environments, protoFiles *state.ProtoFiles) *Service {
 	return &Service{
-		appVersion:         appVersion,
 		requests:           requests,
 		environments:       envs,
 		protoFiles:         protoFiles,
@@ -74,7 +57,7 @@ func NewService(appVersion string, requests *state.Requests, envs *state.Environ
 
 func (s *Service) Dial(req *domain.GRPCRequestSpec) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
-		grpc.WithUserAgent(fmt.Sprintf("%s/%s", appName, s.appVersion)),
+		grpc.WithUserAgent(version.GetAgentName()),
 	}
 
 	if !req.Settings.Insecure {
@@ -222,7 +205,7 @@ func GenerateExampleJSON(messageDescriptor protoreflect.MessageDescriptor) map[s
 	return out
 }
 
-func (s *Service) Invoke(id, activeEnvironmentID string) (*Response, error) {
+func (s *Service) SendRequest(id, activeEnvironmentID string) (*egress.Response, error) {
 	req := s.requests.GetRequest(id)
 	if req == nil {
 		return nil, ErrRequestNotFound
@@ -325,7 +308,7 @@ func (s *Service) Invoke(id, activeEnvironmentID string) (*Response, error) {
 	}
 	elapsed := time.Since(start)
 
-	out := &Response{
+	out := &egress.Response{
 		TimePassed:       elapsed,
 		ResponseMetadata: domain.MetadataToKeyValue(respHeaders),
 		RequestMetadata:  domain.MetadataToKeyValue(outgoingMetadata),
@@ -334,7 +317,16 @@ func (s *Service) Invoke(id, activeEnvironmentID string) (*Response, error) {
 		StatueCode:       int(status.Code(respErr)),
 		Status:           status.Code(respErr).String(),
 		Size:             len(respStr),
-		Body:             respStr,
+		Body:             []byte(respStr),
+	}
+
+	if util.IsJSON(string(out.Body)) {
+		out.IsJSON = true
+		if js, err := util.PrettyJSON(out.Body); err != nil {
+			return nil, err
+		} else {
+			out.JSON = js
+		}
 	}
 
 	if respErr != nil {

@@ -238,6 +238,59 @@ func (e *Environment) ApplyToHTTPRequest(req *HTTPRequestSpec) {
 	}
 }
 
+func (e *Environment) ApplyToGraphQLRequest(req *GraphQLRequestSpec) {
+	if e == nil || req == nil {
+		return
+	}
+
+	for _, envKv := range e.Spec.Values {
+		if strings.Contains(req.URL, "{{"+envKv.Key+"}}") {
+			req.URL = strings.ReplaceAll(req.URL, "{{"+envKv.Key+"}}", envKv.Value)
+		}
+
+		if strings.Contains(req.Query, "{{"+envKv.Key+"}}") {
+			req.Query = strings.ReplaceAll(req.Query, "{{"+envKv.Key+"}}", envKv.Value)
+		}
+
+		if strings.Contains(req.Variables, "{{"+envKv.Key+"}}") {
+			req.Variables = strings.ReplaceAll(req.Variables, "{{"+envKv.Key+"}}", envKv.Value)
+		}
+
+		for i, kv := range req.Headers {
+			if strings.Contains(kv.Value, "{{"+envKv.Key+"}}") {
+				req.Headers[i].Value = strings.ReplaceAll(kv.Value, "{{"+envKv.Key+"}}", envKv.Value)
+			}
+		}
+
+		if req.Auth != (Auth{}) {
+			if req.Auth.APIKeyAuth != nil {
+				if strings.Contains(req.Auth.APIKeyAuth.Key, "{{"+envKv.Key+"}}") {
+					req.Auth.APIKeyAuth.Key = strings.ReplaceAll(req.Auth.APIKeyAuth.Key, "{{"+envKv.Key+"}}", envKv.Value)
+				}
+				if strings.Contains(req.Auth.APIKeyAuth.Value, "{{"+envKv.Key+"}}") {
+					req.Auth.APIKeyAuth.Value = strings.ReplaceAll(req.Auth.APIKeyAuth.Value, "{{"+envKv.Key+"}}", envKv.Value)
+				}
+			}
+
+			if req.Auth.BasicAuth != nil {
+				if strings.Contains(req.Auth.BasicAuth.Username, "{{"+envKv.Key+"}}") {
+					req.Auth.BasicAuth.Username = strings.ReplaceAll(req.Auth.BasicAuth.Username, "{{"+envKv.Key+"}}", envKv.Value)
+				}
+
+				if strings.Contains(req.Auth.BasicAuth.Password, "{{"+envKv.Key+"}}") {
+					req.Auth.BasicAuth.Password = strings.ReplaceAll(req.Auth.BasicAuth.Password, "{{"+envKv.Key+"}}", envKv.Value)
+				}
+			}
+
+			if req.Auth.TokenAuth != nil {
+				if strings.Contains(req.Auth.TokenAuth.Token, "{{"+envKv.Key+"}}") {
+					req.Auth.TokenAuth.Token = strings.ReplaceAll(req.Auth.TokenAuth.Token, "{{"+envKv.Key+"}}", envKv.Value)
+				}
+			}
+		}
+	}
+}
+
 func (e *Environment) GetKeyValues() map[string]interface{} {
 	if e == nil || len(e.Spec.Values) == 0 {
 		return nil

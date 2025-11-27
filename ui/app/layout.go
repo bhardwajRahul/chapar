@@ -64,7 +64,7 @@ func NewBaseLayout(base *ui.Base) (*BaseLayout, error) {
 		return nil, err
 	}
 
-	requestsController := requests.NewController(requestsView, base.Repository, base.RequestsState, base.EnvironmentsState, base.Explorer, base.EgressService, base.GrpcService)
+	requestsController := requests.NewController(requestsView, base.Repository, base.RequestsState, base.EnvironmentsState, base.Explorer, base.EgressService, base.GrpcDiscorvery)
 	if err := requestsController.LoadData(); err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func NewBaseLayout(base *ui.Base) (*BaseLayout, error) {
 	environmentsController := environments.NewController(environmentsView, base.Repository, base.EnvironmentsState, base.Explorer)
 
 	headerLayout := header.NewHeader(base.Window, base.EnvironmentsState, base.WorkspacesState, base.Theme)
-	footerLayout := footer.New("")
+	footerLayout := footer.New()
 	consoleLayout := console.New(base.Theme)
 
 	return &BaseLayout{

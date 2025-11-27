@@ -8,9 +8,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type RequestType string
+
 const (
-	RequestTypeHTTP = "http"
-	RequestTypeGRPC = "grpc"
+	RequestTypeHTTP    RequestType = "http"
+	RequestTypeGRPC    RequestType = "grpc"
+	RequestTypeGraphQL RequestType = "graphql"
 
 	RequestMethodGET     = "GET"
 	RequestMethodPOST    = "POST"
@@ -82,19 +85,21 @@ func (r *Request) MarshalYaml() ([]byte, error) {
 }
 
 type ResponseDetail struct {
-	HTTP *HTTPResponseDetail
-	GRPC *GRPCResponseDetail
+	HTTP    *HTTPResponseDetail
+	GRPC    *GRPCResponseDetail
+	GraphQL *GraphQLResponseDetail
 }
 
 type RequestMeta struct {
-	ID   string `yaml:"id"`
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
+	ID   string      `yaml:"id"`
+	Name string      `yaml:"name"`
+	Type RequestType `yaml:"type"`
 }
 
 type RequestSpec struct {
-	GRPC *GRPCRequestSpec `yaml:"grpc,omitempty"`
-	HTTP *HTTPRequestSpec `yaml:"http,omitempty"`
+	GRPC    *GRPCRequestSpec    `yaml:"grpc,omitempty"`
+	HTTP    *HTTPRequestSpec    `yaml:"http,omitempty"`
+	GraphQL *GraphQLRequestSpec `yaml:"graphql,omitempty"`
 }
 
 func (r *RequestSpec) GetGRPC() *GRPCRequestSpec {
@@ -107,6 +112,93 @@ func (r *RequestSpec) GetGRPC() *GRPCRequestSpec {
 func (r *RequestSpec) GetHTTP() *HTTPRequestSpec {
 	if r.HTTP != nil {
 		return r.HTTP
+	}
+	return nil
+}
+
+func (r *RequestSpec) GetPreRequest() PreRequest {
+	if r.HTTP != nil {
+		return r.HTTP.GetPreRequest()
+	}
+	if r.GRPC != nil {
+		return r.GRPC.GetPreRequest()
+	}
+	if r.GraphQL != nil {
+		return r.GraphQL.GetPreRequest()
+	}
+	return PreRequest{}
+}
+
+func DoablePreRequest(preReq PreRequest) bool {
+	if preReq == (PreRequest{}) {
+		return false
+	}
+
+	if preReq.Type == PrePostTypeTriggerRequest && preReq.TriggerRequest != nil && preReq.TriggerRequest.RequestID != "none" {
+		return true
+	}
+
+	if preReq.Type == PrePostTypeSSHTunnel && preReq.SShTunnel != nil && preReq.SShTunnel.IsValid() {
+		return true
+	}
+
+	if preReq.Type == PrePostTypeK8sTunnel && preReq.KubernetesTunnel != nil && preReq.KubernetesTunnel.IsValid() {
+		return true
+	}
+
+	if preReq.Type == PrePostTypePython && preReq.Script != "" {
+		return true
+	}
+
+	return false
+}
+
+func DoablePostRequest(postReq PostRequest) bool {
+	if postReq == (PostRequest{}) {
+		return false
+	}
+
+	if postReq.Type == PrePostTypeSetEnv && postReq.PostRequestSet.IsValid() {
+		return true
+	}
+
+	if postReq.Type == PrePostTypePython && postReq.Script != "" {
+		return true
+	}
+
+	return false
+}
+
+func (r *RequestSpec) GetPostRequest() PostRequest {
+	if r.HTTP != nil {
+		return r.HTTP.GetPostRequest()
+	}
+	if r.GRPC != nil {
+		return r.GRPC.GetPostRequest()
+	}
+
+	if r.GraphQL != nil {
+		return r.GraphQL.GetPostRequest()
+	}
+	return PostRequest{}
+}
+
+func (r *RequestSpec) GetVariables() []Variable {
+	if r.HTTP != nil {
+		return r.HTTP.Request.Variables
+	}
+	if r.GRPC != nil {
+		return r.GRPC.Variables
+	}
+	if r.GraphQL != nil {
+		return r.GraphQL.VariablesList
+	}
+	return []Variable{}
+}
+
+func (r *RequestSpec) GetGraphQL() *GraphQLRequestSpec {
+	if r.GraphQL != nil {
+		return r.GraphQL
 	}
 	return nil
 }
@@ -135,6 +227,20 @@ func (h *HTTPRequestSpec) GetPreRequest() PreRequest {
 func (h *HTTPRequestSpec) GetPostRequest() PostRequest {
 	if h != nil {
 		return h.Request.PostRequest
+	}
+	return PostRequest{}
+}
+
+func (g *GraphQLRequestSpec) GetPreRequest() PreRequest {
+	if g != nil {
+		return g.PreRequest
+	}
+	return PreRequest{}
+}
+
+func (g *GraphQLRequestSpec) GetPostRequest() PostRequest {
+	if g != nil {
+		return g.PostRequest
 	}
 	return PostRequest{}
 }
@@ -287,6 +393,42 @@ type SShTunnel struct {
 	Flags []string `yaml:"flags"`
 }
 
+func (ssh *SShTunnel) IsValid() bool {
+	return ssh.Host != "" && ssh.Port > 0 && ssh.User != "" && ssh.Password != "" && ssh.KeyPath != "" && ssh.LocalPort > 0 && ssh.TargetPort > 0
+}
+
+func (kt *KubernetesTunnel) IsValid() bool {
+	return kt.Target != "" && kt.TargetType != "" && kt.LocalPort > 0 && kt.TargetPort > 0
+}
+
+func (tr *TriggerRequest) IsValid() bool {
+	return tr.CollectionID != "" && tr.RequestID != ""
+}
+
+func (pr *PostRequest) IsValid() bool {
+	if pr == nil {
+		return false
+	}
+
+	if pr.Type == PrePostTypeSetEnv && pr.PostRequestSet.IsValid() {
+		return true
+	}
+
+	if pr.Type == PrePostTypePython && pr.Script != "" {
+		return true
+	}
+
+	return false
+}
+
+func (ps *PostRequestSet) IsValid() bool {
+	return ps.Target != "" && ps.StatusCode > 0 && (ps.From == PostRequestSetFromResponseHeader ||
+		ps.From == PostRequestSetFromResponseBody ||
+		ps.From == PostRequestSetFromResponseCookie ||
+		ps.From == PostRequestSetFromResponseMetaData ||
+		ps.From == PostRequestSetFromResponseTrailers)
+}
+
 type VariableFrom string
 
 func (v VariableFrom) String() string {
@@ -332,6 +474,10 @@ func CompareRequests(a, b *Request) bool {
 	}
 
 	if !CompareHTTPRequestSpecs(a.Spec.HTTP, b.Spec.HTTP) {
+		return false
+	}
+
+	if !CompareGraphQLRequestSpecs(a.Spec.GraphQL, b.Spec.GraphQL) {
 		return false
 	}
 
@@ -541,5 +687,10 @@ func (r *Request) SetDefaultValues() {
 
 	if r.MetaData.Type == RequestTypeGRPC {
 		r.SetDefaultValuesForGRPC()
+		return
+	}
+
+	if r.MetaData.Type == RequestTypeGraphQL {
+		r.SetDefaultValuesForGraphQL()
 	}
 }

@@ -11,10 +11,11 @@ import (
 	"gioui.org/x/component"
 
 	"github.com/chapar-rest/chapar/internal/egress"
-	"github.com/chapar-rest/chapar/internal/grpc"
+	"github.com/chapar-rest/chapar/internal/egress/graphql"
+	"github.com/chapar-rest/chapar/internal/egress/grpc"
+	"github.com/chapar-rest/chapar/internal/egress/rest"
 	"github.com/chapar-rest/chapar/internal/prefs"
 	"github.com/chapar-rest/chapar/internal/repository"
-	"github.com/chapar-rest/chapar/internal/rest"
 	"github.com/chapar-rest/chapar/internal/scripting"
 	"github.com/chapar-rest/chapar/internal/state"
 	"github.com/chapar-rest/chapar/ui/chapartheme"
@@ -42,15 +43,20 @@ type Base struct {
 	WorkspacesState   *state.Workspaces
 
 	// services
-	GrpcService   *grpc.Service
-	RestService   *rest.Service
+	GrpcService    egress.Sender
+	RestService    egress.Sender
+	GraphQLService egress.Sender
+
+	// keeping it for backward compatibility.
+	GrpcDiscorvery *grpc.Service
+
 	EgressService *egress.Service
 
 	// scripting executor
 	Executor scripting.Executor
 }
 
-func NewBase(appVersion string, w *app.Window, navi *navigator.Navigator) (*Base, error) {
+func NewBase(w *app.Window, navi *navigator.Navigator) (*Base, error) {
 	fontCollection, err := fonts.Prepare()
 	if err != nil {
 		return nil, err
@@ -78,9 +84,10 @@ func NewBase(appVersion string, w *app.Window, navi *navigator.Navigator) (*Base
 	}
 
 	// init services
-	grpcService := grpc.NewService(appVersion, requestsState, environmentsState, protoFilesState)
-	restService := rest.New(requestsState, environmentsState, appVersion)
-	egressService := egress.New(requestsState, environmentsState, restService, grpcService, nil)
+	grpcService := grpc.NewService(requestsState, environmentsState, protoFilesState)
+	restService := rest.New(requestsState, environmentsState)
+	graphqlService := graphql.New(requestsState, environmentsState)
+	egressService := egress.New(requestsState, environmentsState, restService, grpcService, graphqlService, nil)
 
 	modal := modallayer.NewModal()
 
@@ -96,7 +103,9 @@ func NewBase(appVersion string, w *app.Window, navi *navigator.Navigator) (*Base
 		EnvironmentsState: environmentsState,
 		WorkspacesState:   workspacesState,
 		GrpcService:       grpcService,
+		GrpcDiscorvery:    grpcService,
 		RestService:       restService,
+		GraphQLService:    graphqlService,
 		EgressService:     egressService,
 		Executor:          nil, // scripting executor will be set later,
 	}, nil

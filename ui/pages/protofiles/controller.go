@@ -6,7 +6,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/chapar-rest/chapar/internal/domain"
-	"github.com/chapar-rest/chapar/internal/grpc"
+	"github.com/chapar-rest/chapar/internal/egress/grpc"
 	"github.com/chapar-rest/chapar/internal/repository"
 	"github.com/chapar-rest/chapar/internal/state"
 	"github.com/chapar-rest/chapar/ui/explorer"

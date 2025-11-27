@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/chapar-rest/chapar/internal/domain"
-	"github.com/chapar-rest/chapar/internal/grpc"
+	"github.com/chapar-rest/chapar/internal/egress/grpc"
 	"github.com/chapar-rest/chapar/internal/repository"
 )
 
