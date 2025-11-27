@@ -82,9 +82,11 @@ func (r *Restful) SetCollection(collection *domain.Collection) {
 
 	// Set collection headers for inheritance
 	r.Request.Headers.SetCollectionHeaders(collection.Spec.Headers)
+	r.codeModal.SetCollectionHeaders(collection.Spec.Headers)
 
 	// Set collection auth for inheritance
 	r.Request.Auth.SetCollectionAuth(&collection.Spec.Auth)
+	r.codeModal.SetCollectionAuth(&collection.Spec.Auth)
 }
 
 func (r *Restful) SetOnSetOnTriggerRequestChanged(f func(id, collectionID, requestID string)) {

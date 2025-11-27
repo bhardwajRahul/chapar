@@ -26,9 +26,17 @@ func (svc *Service) OnActiveEnvironmentChange(env *domain.Environment) {
 	svc.currentEnvironment = env
 }
 
-func (svc *Service) applyVariables(req *domain.HTTPRequestSpec) *domain.HTTPRequestSpec {
+func (svc *Service) applyVariables(req *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) *domain.HTTPRequestSpec {
 	vars := variables.GetVariables()
 	r := req.Clone()
+
+	// apply headers from collection
+	r.Request.Headers = domain.MergeHeaders(collectionHeaders, r.Request.Headers)
+
+	if collectionAuth != nil && collectionAuth.Type != domain.AuthTypeNone && r.Request.Auth.Type == domain.AuthTypeInherit {
+		r.Request.Auth = *collectionAuth
+	}
+
 	r.RenderParams()
 	variables.ApplyToHTTPRequest(vars, r)
 
@@ -122,8 +130,8 @@ func (svc *Service) applyAuthToHeaders(req *domain.HTTPRequestSpec) {
 	}
 }
 
-func (svc *Service) generate(codeTmpl string, requestSpec *domain.HTTPRequestSpec) (string, error) {
-	req := svc.applyVariables(requestSpec)
+func (svc *Service) generate(codeTmpl string, reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
+	req := svc.applyVariables(reqSpec, collectionHeaders, collectionAuth)
 
 	// Parse and execute the template
 	tmpl, err := template.New("code-template").Funcs(template.FuncMap{
@@ -174,7 +182,7 @@ func (svc *Service) generate(codeTmpl string, requestSpec *domain.HTTPRequestSpe
 	return out, nil
 }
 
-func (svc *Service) GeneratePythonRequest(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GeneratePythonRequest(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	// Define a Go template to generate the Python `requests` code
 	const pythonTemplate = `import requests
 {{- if eq .Request.Body.Type "json" }}
@@ -247,10 +255,10 @@ print(response.status_code)
 print(response.text)
 `
 
-	return svc.generate(pythonTemplate, requestSpec)
+	return svc.generate(pythonTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateCurlCommand(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateCurlCommand(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	// Define a Go template to generate the `curl` command
 	const curlTemplate = `{{- if eq .Method "HEAD" }}curl --head "{{ .URL }}"{{- else }}curl -X {{ .Method }} "{{ .URL }}"{{- end }}{{ if .Request.Headers }} \
 {{- range $i, $header := .Request.Headers }}
@@ -290,10 +298,10 @@ func (svc *Service) GenerateCurlCommand(requestSpec *domain.HTTPRequestSpec) (st
 {{- end }}
 `
 
-	return svc.generate(curlTemplate, requestSpec)
+	return svc.generate(curlTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateGoRequest(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateGoRequest(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	const goTemplate = `package main
 
 import (
@@ -423,10 +431,10 @@ func main() {
 	  fmt.Println(string(body))
 }`
 
-	return svc.generate(goTemplate, requestSpec)
+	return svc.generate(goTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateAxiosCommand(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateAxiosCommand(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	const axiosTemplate = `const axios = require('axios');
 {{- if eq .Request.Body.Type "formData" }}
 const FormData = require('form-data');
@@ -489,10 +497,10 @@ axios({
     console.error(error.message);
 });
 `
-	return svc.generate(axiosTemplate, requestSpec)
+	return svc.generate(axiosTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateFetchCommand(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateFetchCommand(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	const fetchTemplate = `{{- if eq .Request.Body.Type "formData" }}
 const FormData = require('form-data');
 const fs = require('fs');
@@ -554,10 +562,10 @@ fetch('{{ .URL }}', {
 .then(data => console.log(data))
 .catch(error => console.error(error));
 `
-	return svc.generate(fetchTemplate, requestSpec)
+	return svc.generate(fetchTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateKotlinOkHttpCommand(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateKotlinOkHttpCommand(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	const kotlinTemplate = `import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -621,10 +629,10 @@ client.newCall(request).enqueue(object : Callback {
     }
 })
 `
-	return svc.generate(kotlinTemplate, requestSpec)
+	return svc.generate(kotlinTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateJavaOkHttpCommand(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateJavaOkHttpCommand(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	const javaTemplate = `import okhttp3.*;
 import java.io.File;
 import java.io.IOException;
@@ -703,10 +711,10 @@ public class ApiRequest {
     }
 }
 `
-	return svc.generate(javaTemplate, requestSpec)
+	return svc.generate(javaTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateRubyNetHttpCommand(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateRubyNetHttpCommand(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	const rubyTemplate = `require 'net/http'
 require 'uri'
 {{- if eq .Request.Body.Type "json" }}
@@ -782,10 +790,10 @@ puts "Response code: #{response.code}"
 puts "Response body: #{response.body}"
 `
 
-	return svc.generate(rubyTemplate, requestSpec)
+	return svc.generate(rubyTemplate, reqSpec, collectionHeaders, collectionAuth)
 }
 
-func (svc *Service) GenerateDotNetHttpClientCommand(requestSpec *domain.HTTPRequestSpec) (string, error) {
+func (svc *Service) GenerateDotNetHttpClientCommand(reqSpec *domain.HTTPRequestSpec, collectionHeaders []domain.KeyValue, collectionAuth *domain.Auth) (string, error) {
 	const dotNetTemplate = `using System;
 using System.IO;
 using System.Net.Http;
@@ -850,5 +858,5 @@ public class Program {
 }
 `
 
-	return svc.generate(dotNetTemplate, requestSpec)
+	return svc.generate(dotNetTemplate, reqSpec, collectionHeaders, collectionAuth)
 }

@@ -29,8 +29,8 @@ func TestGenerateCurlCommand(t *testing.T) {
 		{
 			name: "HEAD request",
 			spec: &domain.HTTPRequestSpec{
-				Method: domain.RequestMethodHEAD,
-				URL:    "https://api.example.com/users",
+				Method:  domain.RequestMethodHEAD,
+				URL:     "https://api.example.com/users",
 				Request: &domain.HTTPRequest{},
 			},
 			contains: []string{"curl --head", "https://api.example.com/users"},
@@ -70,7 +70,7 @@ func TestGenerateCurlCommand(t *testing.T) {
 	svc := &Service{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			code, err := svc.GenerateCurlCommand(tt.spec)
+			code, err := svc.GenerateCurlCommand(tt.spec, []domain.KeyValue{}, nil)
 			if err != nil {
 				t.Fatalf("GenerateCurlCommand() error = %v", err)
 			}
@@ -141,7 +141,7 @@ func TestGeneratePythonRequest(t *testing.T) {
 	svc := &Service{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			code, err := svc.GeneratePythonRequest(tt.spec)
+			code, err := svc.GeneratePythonRequest(tt.spec, []domain.KeyValue{}, nil)
 			if err != nil {
 				t.Fatalf("GeneratePythonRequest() error = %v", err)
 			}
@@ -195,7 +195,7 @@ func TestGenerateGoRequest(t *testing.T) {
 	svc := &Service{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			code, err := svc.GenerateGoRequest(tt.spec)
+			code, err := svc.GenerateGoRequest(tt.spec, []domain.KeyValue{}, nil)
 			if err != nil {
 				t.Fatalf("GenerateGoRequest() error = %v", err)
 			}
@@ -249,7 +249,7 @@ func TestGenerateAxiosCommand(t *testing.T) {
 	svc := &Service{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			code, err := svc.GenerateAxiosCommand(tt.spec)
+			code, err := svc.GenerateAxiosCommand(tt.spec, []domain.KeyValue{}, nil)
 			if err != nil {
 				t.Fatalf("GenerateAxiosCommand() error = %v", err)
 			}
@@ -275,7 +275,7 @@ func TestGenerateKotlinOkHttpCommand(t *testing.T) {
 		},
 	}
 
-	code, err := svc.GenerateKotlinOkHttpCommand(spec)
+	code, err := svc.GenerateKotlinOkHttpCommand(spec, []domain.KeyValue{}, nil)
 	if err != nil {
 		t.Fatalf("GenerateKotlinOkHttpCommand() error = %v", err)
 	}
@@ -301,7 +301,7 @@ func TestGenerateJavaOkHttpCommand(t *testing.T) {
 		},
 	}
 
-	code, err := svc.GenerateJavaOkHttpCommand(spec)
+	code, err := svc.GenerateJavaOkHttpCommand(spec, []domain.KeyValue{}, nil)
 	if err != nil {
 		t.Fatalf("GenerateJavaOkHttpCommand() error = %v", err)
 	}
@@ -327,7 +327,7 @@ func TestGenerateRubyNetHttpCommand(t *testing.T) {
 		},
 	}
 
-	code, err := svc.GenerateRubyNetHttpCommand(spec)
+	code, err := svc.GenerateRubyNetHttpCommand(spec, []domain.KeyValue{}, nil)
 	if err != nil {
 		t.Fatalf("GenerateRubyNetHttpCommand() error = %v", err)
 	}
@@ -353,7 +353,7 @@ func TestGenerateDotNetHttpClientCommand(t *testing.T) {
 		},
 	}
 
-	code, err := svc.GenerateDotNetHttpClientCommand(spec)
+	code, err := svc.GenerateDotNetHttpClientCommand(spec, []domain.KeyValue{}, nil)
 	if err != nil {
 		t.Fatalf("GenerateDotNetHttpClientCommand() error = %v", err)
 	}

@@ -20,7 +20,9 @@ import (
 )
 
 type CodeModal struct {
-	req *domain.Request
+	req               *domain.Request
+	collectionHeaders []domain.KeyValue
+	collectionAuth    *domain.Auth
 
 	codeEditor  *codeeditor.CodeEditor
 	CopyButton  widget.Clickable
@@ -65,28 +67,28 @@ func (c *CodeModal) onLangSelected(lang string) {
 	switch lang {
 	case "curl":
 		c.lang = codeeditor.CodeLanguageShell
-		code, err = codegen.DefaultService.GenerateCurlCommand(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GenerateCurlCommand(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	case "python":
 		c.lang = codeeditor.CodeLanguagePython
-		code, err = codegen.DefaultService.GeneratePythonRequest(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GeneratePythonRequest(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	case "golang":
 		c.lang = codeeditor.CodeLanguageGolang
-		code, err = codegen.DefaultService.GenerateGoRequest(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GenerateGoRequest(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	case "axios":
 		c.lang = codeeditor.CodeLanguageJavaScript
-		code, err = codegen.DefaultService.GenerateAxiosCommand(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GenerateAxiosCommand(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	case "node-fetch":
 		c.lang = codeeditor.CodeLanguageJavaScript
-		code, err = codegen.DefaultService.GenerateFetchCommand(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GenerateFetchCommand(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	case "java-okhttp":
 		c.lang = codeeditor.CodeLanguageJava
-		code, err = codegen.DefaultService.GenerateJavaOkHttpCommand(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GenerateJavaOkHttpCommand(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	case "ruby-net":
 		c.lang = codeeditor.CodeLanguageRuby
-		code, err = codegen.DefaultService.GenerateRubyNetHttpCommand(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GenerateRubyNetHttpCommand(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	case "dot-net":
 		c.lang = codeeditor.CodeLanguageDotNet
-		code, err = codegen.DefaultService.GenerateDotNetHttpClientCommand(c.req.Spec.HTTP)
+		code, err = codegen.DefaultService.GenerateDotNetHttpClientCommand(c.req.Spec.HTTP, c.collectionHeaders, c.collectionAuth)
 	}
 
 	if err != nil {
@@ -103,6 +105,14 @@ func (c *CodeModal) SetVisible(visible bool) {
 
 func (c *CodeModal) SetRequest(req *domain.Request) {
 	c.req = req
+}
+
+func (c *CodeModal) SetCollectionHeaders(headers []domain.KeyValue) {
+	c.collectionHeaders = headers
+}
+
+func (c *CodeModal) SetCollectionAuth(auth *domain.Auth) {
+	c.collectionAuth = auth
 }
 
 func (c *CodeModal) layout(gtx layout.Context, theme *chapartheme.Theme) layout.Dimensions {
